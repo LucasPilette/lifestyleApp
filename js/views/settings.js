@@ -44,11 +44,11 @@ export default function settingsView(root) {
   async function doExport() {
     const data = exportData();
     const json = JSON.stringify(data);
-    const name = `lifestyle-sauvegarde-${todayKey()}.json`;
+    const name = `eclipse-sauvegarde-${todayKey()}.json`;
     const file = new File([json], name, { type: 'application/json' });
     try {
       if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: 'Sauvegarde Lifestyle' });
+        await navigator.share({ files: [file], title: 'Sauvegarde Eclipse' });
       } else {
         const url = URL.createObjectURL(file);
         const a = h('a', { href: url, download: name });
@@ -89,7 +89,12 @@ export default function settingsView(root) {
     }
   });
 
+  const nameInput = h('input', { class: 'text-input', type: 'text', value: st.name || '', placeholder: 'Ton prénom', autocomplete: 'given-name', style: { width: '150px', textAlign: 'right', padding: '8px 12px' } });
+  nameInput.addEventListener('input', () => updateSettings({ name: nameInput.value.trim() }));
+
   const page = h('div', { class: 'page' },
+    h('div', { class: 'section-title' }, 'Profil'),
+    h('div', { class: 'list' }, row('Prénom', 'Pour le message d’accueil', nameInput)),
     h('div', { class: 'section-title' }, 'Objectifs quotidiens'),
     h('div', { class: 'list' },
       row('Sommeil', null, stepper({ value: g.sleepMin || 480, step: 15, min: 240, max: 720, format: fmtSleep, onChange: (v) => updateSettings({ goals: { sleepMin: v } }) })),
@@ -100,7 +105,7 @@ export default function settingsView(root) {
 
     h('div', { class: 'section-title' }, 'Entraînement'),
     h('div', { class: 'list' },
-      row('Poids de corps', 'Pour le 1RM des tractions et dips lestés', h('div', { class: 'field-row' }, bwInput, h('span', { class: 'unit' }, 'kg'))),
+      row('Poids de corps', 'Mis à jour par ta dernière pesée ; sert au 1RM des tractions et dips', h('div', { class: 'field-row' }, bwInput, h('span', { class: 'unit' }, 'kg'))),
       row('Son de fin de repos', 'Se mélange à ta musique ; muet si l’iPhone est en silencieux', toggle(st.sound, (v) => updateSettings({ sound: v }), 'Son')),
       row('Bips 3-2-1', 'Décompte avant la fin du repos', toggle(st.countdown, (v) => updateSettings({ countdown: v }), 'Décompte')),
       row('Vibrations', 'Au toucher (iOS 18+)', toggle(st.haptics, (v) => updateSettings({ haptics: v }), 'Vibrations')),

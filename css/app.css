@@ -24,6 +24,8 @@
   --c-kcal: #e9742e;
   --c-prot: #2f93e6;
   --c-steps: #14a86a;
+  --c-weight: #e0b341;
+  --c-mood: #ec6fae;
 
   --radius: 18px;
   --radius-sm: 12px;
@@ -587,3 +589,62 @@ select.text-input { appearance: none; -webkit-appearance: none; }
 .swatch { width: 38px; height: 38px; border-radius: 50%; background: var(--tc); color: #0b0d10; display: grid; place-items: center; box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.15); transition: transform 0.1s; }
 .swatch.sel { box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--tc); }
 .swatch:active { transform: scale(0.92); }
+
+/* ==========================================================================
+   Accueil v3 : date centrée, salutation, flamme, rubriques repliables
+   ========================================================================== */
+.home-top { grid-template-columns: auto 1fr auto; padding: calc(var(--safe-t) + 6px) 12px 6px; }
+.home-top .daynav { justify-content: center; gap: 2px; min-width: 0; }
+.home-top .daynav .icon-btn { width: 34px; height: 34px; color: var(--text-2); }
+.home-top .daynav .icon-btn:disabled { opacity: 0.25; }
+.day-label { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; padding: 6px 8px; border-radius: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.day-label:active { background: rgba(255, 255, 255, 0.06); }
+
+.greet { padding: 6px 4px 2px; }
+.greet-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.greet h1 { font-size: 28px; font-weight: 800; letter-spacing: -0.025em; line-height: 1.15; }
+.greet-msg { margin-top: 4px; font-size: 14.5px; color: var(--text-2); line-height: 1.4; min-height: 2.8em; }
+.flame {
+  flex: none; display: inline-flex; align-items: center; gap: 5px; height: 36px; padding: 0 12px 0 10px; border-radius: 18px;
+  font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--text-3);
+  background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.flame.lit { color: #fff; background: linear-gradient(135deg, #ff9a3d, #ff4d2e); border-color: transparent; box-shadow: 0 6px 22px rgba(255, 90, 40, 0.35); }
+.flame.lit .icon { fill: rgba(255, 230, 120, 0.9); stroke: #fff; }
+
+.home-page { gap: 10px; }
+.rubric { padding: 0; border-radius: 20px; overflow: hidden; transition: border-color 0.2s, box-shadow 0.2s; }
+.rubric::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
+  background: radial-gradient(90% 120% at 0% 0%, color-mix(in srgb, var(--c) 16%, transparent), transparent 60%);
+}
+.rubric { position: relative; }
+.rubric.needs { border-color: color-mix(in srgb, var(--c) 55%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--c) 25%, transparent), 0 10px 30px rgba(0, 0, 0, 0.28); }
+.rb-head { position: relative; display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 12px; min-height: 58px; cursor: pointer; -webkit-user-select: none; user-select: none; }
+.rb-head:active { background: rgba(255, 255, 255, 0.03); }
+.rb-head h2 { font-size: 16px; font-weight: 700; color: color-mix(in srgb, var(--c) 55%, #fff); white-space: nowrap; }
+.rb-sum { flex: 1; min-width: 0; text-align: right; font-size: 14px; color: var(--text-2); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rubric.needs .rb-sum { color: var(--c); font-weight: 650; }
+.rb-status { flex: none; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 800; border: 1.5px dashed rgba(255, 255, 255, 0.18); }
+.rb-status.ok { background: var(--c); border: 0; color: #0b0d10; }
+.rb-status.alert { background: var(--c); border: 0; color: #0b0d10; animation: pulse-soft 1.6s ease-in-out infinite; }
+@keyframes pulse-soft { 50% { transform: scale(1.15); } }
+.rb-head .chart-btn { width: 34px; height: 34px; margin: 0; display: none; }
+.rubric.open .rb-head .chart-btn { display: grid; }
+.rb-arrow { flex: none; width: 30px; height: 34px; display: grid; place-items: center; color: var(--text-3); transition: transform 0.25s ease; }
+.rubric.open .rb-arrow { transform: rotate(180deg); color: var(--text); }
+.rb-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.28s ease; }
+.rubric.open .rb-body { grid-template-rows: 1fr; }
+.rb-inner { overflow: hidden; min-height: 0; padding: 0 14px; }
+.rubric.open .rb-inner { padding-bottom: 14px; }
+.rb-hint { font-size: 12.5px; color: var(--text-3); margin-top: 8px; line-height: 1.4; }
+
+.moods { display: flex; gap: 6px; }
+.mood {
+  flex: 1; height: 52px; border-radius: 14px; font-size: 26px; line-height: 1;
+  background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(255, 255, 255, 0.09);
+  filter: grayscale(0.85); opacity: 0.7; transition: transform 0.12s, filter 0.15s, opacity 0.15s, background 0.15s;
+}
+.mood:active { transform: scale(0.92); }
+.mood.sel { filter: none; opacity: 1; background: color-mix(in srgb, var(--c-mood) 28%, rgba(0, 0, 0, 0.2)); border-color: color-mix(in srgb, var(--c-mood) 60%, transparent); transform: scale(1.04); }
+.mood-note { margin-top: 10px; font-size: 15px; padding: 10px 12px; background: rgba(0, 0, 0, 0.28); border-color: rgba(255, 255, 255, 0.09); resize: none; }

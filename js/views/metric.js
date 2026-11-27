@@ -3,7 +3,7 @@
 import { h } from '../core/dom.js';
 import { state } from '../core/store.js';
 import { todayKey, formatShort, relativeDay } from '../core/date.js';
-import { METRICS, periodData, summary } from '../core/metrics.js';
+import { METRICS, MOODS, periodData, summary } from '../core/metrics.js';
 import { mountChart } from '../components/chart.js';
 import { back, navigate } from '../core/router.js';
 import { pageHeader, segmented } from '../core/ui.js';
@@ -14,6 +14,8 @@ const PAGES = {
   sommeil: { title: 'Sommeil', fields: ['sleepMin', 'sleepQ'] },
   nutrition: { title: 'Nutrition', fields: ['kcal', 'prot'] },
   pas: { title: 'Pas', fields: ['steps'] },
+  poids: { title: 'Poids', fields: ['weight'] },
+  humeur: { title: 'Humeur', fields: ['mood'] },
 };
 
 const PERIODS = [['jours', '30 jours'], ['semaines', 'Semaines'], ['mois', 'Mois']];
@@ -53,7 +55,8 @@ export default function metricView(root, pageId) {
         legend,
         statsGrid(field, goal)));
       charts.push(mountChart(host, {
-        type: 'bar',
+        type: m.chart || 'bar',
+        connectGaps: true,
         points: data.points,
         overlay: data.overlay,
         color: m.color,
@@ -97,7 +100,8 @@ export default function metricView(root, pageId) {
         h('button', { class: 'row', onClick: () => navigate(d.date === today ? '/' : `/day/${d.date}`) },
           h('div', { class: 'row-main' },
             h('div', { class: 'row-title' }, relativeDay(d.date, today)),
-            pageId === 'sommeil' && d.sleepQ ? h('div', { class: 'row-sub' }, `Qualité ${d.sleepQ}/5 · ${QUALITY_LABELS[d.sleepQ]}`) : null),
+            pageId === 'sommeil' && d.sleepQ ? h('div', { class: 'row-sub' }, `Qualité ${d.sleepQ}/5 · ${QUALITY_LABELS[d.sleepQ]}`) : null,
+            pageId === 'humeur' && d.mood ? h('div', { class: 'row-sub', style: { whiteSpace: 'normal' } }, `${MOODS[d.mood].emoji} ${MOODS[d.mood].label}${d.moodNote ? ` · « ${d.moodNote} »` : ''}`) : null),
           h('div', { class: 'row-end' },
             def.fields.filter((f) => !(pageId === 'sommeil' && f === 'sleepQ')).map((f, i) =>
               h('div', { style: i ? { fontSize: '12.5px', color: 'var(--text-3)' } : { color: 'var(--text)', fontWeight: 600 } }, d[f] != null ? METRICS[f].fmt(d[f]) : '–'))))));

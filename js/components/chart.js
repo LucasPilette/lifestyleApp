@@ -52,14 +52,20 @@ export function mountChart(host, opts) {
     let lo = zero ? 0 : all.length ? Math.min(...all) : 0;
     let hi = all.length ? Math.max(...all) : 1;
     if (opts.maxY != null) hi = Math.max(hi, opts.maxY);
-    if (!zero) lo = Math.max(0, lo - (hi - lo) * 0.15);
+    if (!zero) {
+      // Échelle serrée autour des données (ex. poids 78,1-78,3 kg), avec une amplitude minimale.
+      const span = Math.max(hi - lo, opts.minSpan ?? Math.max(1, hi * 0.02));
+      const mid = (hi + lo) / 2;
+      lo = Math.max(0, mid - span * 0.65);
+      hi = mid + span * 0.65;
+    }
     let sc;
     if (opts.step) {
       // pas imposé (ex. 2 h pour le sommeil), doublé si trop de graduations
       let step = opts.step;
       while ((Math.ceil(hi / step) - Math.floor(lo / step)) > 6) step *= 2;
       sc = { min: Math.floor(lo / step) * step, max: Math.max(step, Math.ceil((hi * 1.02) / step) * step), step };
-    } else sc = niceScale(lo, hi * (zero ? 1.05 : 1.02), 4);
+    } else sc = niceScale(lo, zero ? hi * 1.05 : hi, 4);
     if (opts.maxY != null && sc.max > opts.maxY && hi <= opts.maxY) sc.max = opts.maxY;
     const y = (v) => pad.t + ph - ((v - sc.min) / (sc.max - sc.min)) * ph;
     const band = pw / Math.max(1, n);

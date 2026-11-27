@@ -1,7 +1,7 @@
 // Définition des indicateurs quotidiens et calculs statistiques (moyennes, tendances, séries).
 // Pur : prend une Map date -> entrée, testable sous Node.
 
-import { addDays, addMonths, formatMonth, formatShort, keysBetween, monthEnd, monthStart, weekStart, dayMonth, formatMonthLong } from './date.js';
+import { addDays, addMonths, diffDays, formatMonth, formatShort, keysBetween, monthEnd, monthStart, weekStart, dayMonth, formatMonthLong } from './date.js';
 import { fmtNum, fmtSleep } from './format.js';
 
 export const METRICS = {
@@ -25,7 +25,85 @@ export const METRICS = {
     label: 'Pas', short: 'Pas', unit: 'pas', color: 'var(--c-steps)', goalType: 'min',
     fmt: (v) => `${fmtNum(Math.round(v))} pas`, fmtDelta: (v) => fmtNum(Math.round(v)), tick: (v) => (v >= 1000 ? `${fmtNum(v / 1000, 1)}k` : fmtNum(v)),
   },
+  weight: {
+    label: 'Poids', short: 'Poids', unit: 'kg', color: 'var(--c-weight)', goalType: null, chart: 'line',
+    fmt: (v) => `${fmtNum(v, 1)} kg`, fmtDelta: (v) => `${fmtNum(v, 1)} kg`, tick: (v) => fmtNum(v, 1),
+  },
+  mood: {
+    label: 'Humeur', short: 'Humeur', unit: '/5', color: 'var(--c-mood)', goalType: null, maxY: 5, step: 1,
+    fmt: (v) => `${fmtNum(v, 1)}/5`, fmtDelta: (v) => fmtNum(v, 1), tick: (v) => fmtNum(v, 0),
+  },
 };
+
+export const MOODS = [
+  null,
+  { emoji: '😞', label: 'Pas bien' },
+  { emoji: '😕', label: 'Bof' },
+  { emoji: '😐', label: 'Neutre' },
+  { emoji: '🙂', label: 'Bien' },
+  { emoji: '😄', label: 'Très bien' },
+];
+
+// --- Poids : rappel tous les 3 jours ---------------------------------------
+export const WEIGHT_REMINDER_DAYS = 3;
+
+/** Dernière valeur renseignée strictement avant `date` (ou null). */
+export function lastValueBefore(days, field, date) {
+  let best = null;
+  for (const [key, d] of days) {
+    if (key >= date || d[field] == null) continue;
+    if (!best || key > best.key) best = { key, value: d[field] };
+  }
+  return best;
+}
+
+/** Le poids est-il demandé ce jour-là ? (aucune pesée depuis au moins 3 jours) */
+export function weightRequired(days, date) {
+  const last = lastValueBefore(days, 'weight', date);
+  return !last || diffDays(date, last.key) >= WEIGHT_REMINDER_DAYS;
+}
+
+// --- Jour parfait ------------------------------------------------------------
+/**
+ * Bilan d'une journée : toutes les données demandées sont renseignées
+ * ET (objectif de pas atteint OU séance faite ce jour-là).
+ * @param {Set<string>} sessionDays jours où une séance a été terminée
+ */
+export function dayChecklist(days, date, { goals = {}, sessionDays = new Set() } = {}) {
+  const d = days.get(date) || {};
+  const items = [
+    { id: 'sleep', label: 'sommeil', ok: d.sleepMin != null && d.sleepQ != null },
+    { id: 'mood', label: 'humeur', ok: d.mood != null },
+    { id: 'nutrition', label: 'nutrition', ok: d.kcal != null && d.prot != null },
+    { id: 'steps', label: 'pas', ok: d.steps != null },
+  ];
+  if (weightRequired(days, date) || d.weight != null) items.push({ id: 'weight', label: 'poids', ok: d.weight != null });
+  const dataOk = items.every((i) => i.ok);
+  const stepsGoal = goals.steps || 0;
+  const trained = sessionDays.has(date);
+  const stepsOk = stepsGoal > 0 && (d.steps || 0) >= stepsGoal;
+  const activityOk = trained || stepsOk;
+  return {
+    items,
+    missing: items.filter((i) => !i.ok).map((i) => i.label),
+    dataOk,
+    activityOk,
+    trained,
+    stepsLeft: stepsGoal ? Math.max(0, stepsGoal - (d.steps || 0)) : 0,
+    perfect: dataOk && activityOk,
+  };
+}
+
+/** Jours parfaits consécutifs, jusqu'à aujourd'hui (ou hier si la journée n'est pas encore parfaite). */
+export function perfectStreak(days, today, opts) {
+  let k = dayChecklist(days, today, opts).perfect ? today : addDays(today, -1);
+  let n = 0;
+  while (n < 3650 && dayChecklist(days, k, opts).perfect) {
+    n++;
+    k = addDays(k, -1);
+  }
+  return n;
+}
 
 /** Objectif atteint ? 'min' = au moins l'objectif ; 'target' = à ±10 %. */
 export function meetsGoal(value, goal, type) {

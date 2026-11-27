@@ -17,7 +17,7 @@ import settingsView from './views/settings.js';
 
 route(/^\/$/, homeView);
 route(/^\/day\/(\d{4}-\d{2}-\d{2})$/, homeView);
-route(/^\/metric\/(sommeil|nutrition|pas)$/, metricView);
+route(/^\/metric\/(sommeil|nutrition|pas|poids|humeur)$/, metricView);
 route(/^\/train$/, trainView);
 route(/^\/workout$/, workoutView);
 route(/^\/summary\/([\w-]+)$/, summaryView);

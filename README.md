@@ -1,4 +1,4 @@
-# Lifestyle
+# Eclipse
 
 Compagnon quotidien pour iPhone : sommeil, nutrition, pas et séances de musculation.
 Application web installable (PWA), hébergée gratuitement sur GitHub Pages, qui fonctionne hors-ligne.
@@ -6,8 +6,12 @@ Application web installable (PWA), hébergée gratuitement sur GitHub Pages, qui
 
 ## Fonctionnalités
 
-- **Accueil** épuré (verre dépoli, tient sur un écran) : saisie du jour (durée et qualité du sommeil, calories,
-  protéines, pas). L'icône de courbe à droite de chaque rubrique ouvre son suivi. Flèches pour corriger les jours passés.
+- **Accueil** épuré (verre dépoli, tient sur un écran) : date centrée, « Bonjour Lucas » et un message selon
+  la journée, flamme 🔥 des jours parfaits d'affilée. Rubriques repliables (titre coloré + résumé) : sommeil
+  (durée, qualité /5), humeur (5 émojis + note), poids (rappel tous les 3 jours), nutrition, pas, entraînement.
+  L'icône de courbe d'une rubrique ouverte mène à son suivi. Flèches pour corriger les jours passés.
+- **Jour parfait** : toutes les données demandées renseignées (poids seulement les jours de rappel) et
+  objectif de pas atteint *ou* séance faite.
 - **Suivi détaillé** : graphiques sur 30 jours (avec moyenne glissante), par semaine et par mois ; objectif
   atteint (%), série en cours, min/max. Glisser le doigt sur un graphique affiche les valeurs.
 - **S'entraîner** : choix de la séance (la suivante du programme est suggérée), puis accompagnement :

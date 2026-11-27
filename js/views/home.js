@@ -1,30 +1,59 @@
-// Accueil : saisie du jour (sommeil, nutrition, pas) et accès à l'entraînement.
-// Volontairement épuré : les courbes et moyennes sont dans les pages de suivi (icône à droite de chaque rubrique).
+// Accueil : salutation + série de jours parfaits, puis rubriques repliables
+// (titre coloré + résumé ; un appui déroule la saisie, la flèche la replie).
 
 import { h, icon, iconButton, numInput } from '../core/dom.js';
-import { state, getDay, setDayField, activeSession, doneSessions, sessionColor } from '../core/store.js';
-import { todayKey, addDays, relativeDay, formatLong, weekStart, dateKey, agoLabel, formatWeekday } from '../core/date.js';
-import { METRICS, meetsGoal } from '../core/metrics.js';
+import { state, getDay, setDayField, activeSession, doneSessions, sessionColor, updateSettings } from '../core/store.js';
+import { todayKey, addDays, formatLong, weekStart, dateKey, agoLabel, formatWeekday } from '../core/date.js';
+import { METRICS, MOODS, meetsGoal, dayChecklist, perfectStreak, weightRequired, lastValueBefore } from '../core/metrics.js';
 import { navigate } from '../core/router.js';
-import { fmtNum, fmtClock, parseNum } from '../core/format.js';
+import { fmtNum, fmtClock, fmtSleep, parseNum } from '../core/format.js';
 import { debounce } from '../core/util.js';
+import { toast } from '../core/ui.js';
+import { haptic } from '../core/feedback.js';
 
 export const QUALITY_LABELS = ['', 'Très mauvaise', 'Mauvaise', 'Moyenne', 'Bonne', 'Excellente'];
 
 const isIOS = () => /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 export const isStandalone = () => navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
 
+/** Jours où une séance a été terminée. */
+export function sessionDaySet() {
+  return new Set(doneSessions().map((s) => dateKey(new Date(s.startedAt))));
+}
+
+/** Message d'accueil selon l'état de la journée. */
+export function greetingMessage(c, isToday) {
+  if (c.perfect) return isToday ? 'Journée parfaite : tout est renseigné et ton objectif est rempli. 🔥' : 'Journée parfaite. 🔥';
+  if (!isToday) return c.missing.length ? `Il manquait : ${c.missing.join(', ')}.` : 'Ni objectif de pas atteint, ni séance ce jour-là.';
+  if (c.missing.length === c.items.length) return 'Commence par ta nuit et ton humeur du jour.';
+  if (c.missing.length) {
+    const act = c.activityOk ? '' : ' Puis bouge : objectif de pas ou une séance.';
+    return `Il te reste à renseigner : ${c.missing.join(', ')}.${act}`;
+  }
+  return `Tout est renseigné ! Plus que ${fmtNum(c.stepsLeft)} pas ou une séance pour une journée parfaite.`;
+}
+
 export default function home(root, dateParam) {
   const today = todayKey();
   const date = dateParam && dateParam < today ? dateParam : today;
   const isToday = date === today;
   const goals = state.settings.goals;
-  const day = getDay(date) || {};
+  const day = () => getDay(date) || {};
+  const sessionDays = sessionDaySet();
+  const refreshers = [];
+  const refresh = () => refreshers.forEach((fn) => fn());
 
   // Un debounce par champ : saisir les calories puis les protéines ne doit rien perdre.
   const savers = new Map();
   const saverFor = (field) => {
-    if (!savers.has(field)) savers.set(field, debounce((value) => setDayField(date, field, value), 300));
+    if (!savers.has(field)) {
+      savers.set(field, debounce((value) => {
+        setDayField(date, field, value);
+        // Le dernier poids sert aussi au calcul des exercices au poids du corps.
+        if (field === 'weight' && value != null && isToday) updateSettings({ bodyweight: value });
+        refresh();
+      }, 350));
+    }
     return savers.get(field);
   };
   const save = (field, value) => saverFor(field)(value);
@@ -34,21 +63,35 @@ export default function home(root, dateParam) {
   document.addEventListener('visibilitychange', onHide);
   window.addEventListener('pagehide', flushAll);
 
-  // --- En-tête avec navigation entre les jours ---
+  // --- En-tête : date centrée ---
   const goDay = (k) => navigate(k >= today ? '/' : `/day/${k}`, { replace: true });
-  const title = relativeDay(date, today);
   const header = h('header', { class: 'topbar home-top' },
-    h('div', { class: 'topbar-title' },
-      h('div', { class: 'daynav' },
-        h('button', { class: 'icon-btn', 'aria-label': 'Jour précédent', onClick: () => goDay(addDays(date, -1)) }, icon('back', 18)),
-        h('span', { class: 'eyebrow' }, isToday || title !== formatLong(date) ? formatLong(date) : 'Journal'),
-        h('button', { class: 'icon-btn', 'aria-label': 'Jour suivant', disabled: isToday, onClick: () => goDay(addDays(date, 1)) }, icon('chevron', 18))),
-      h('h1', { class: 'home-title', style: title.length > 14 ? { fontSize: '22px' } : null }, title)),
-    h('div', { class: 'topbar-actions' },
-      iconButton('history', 'Historique', () => navigate('/history'), 'glass-btn'),
-      iconButton('sliders', 'Réglages', () => navigate('/settings'), 'glass-btn')));
+    iconButton('history', 'Historique', () => navigate('/history'), 'glass-btn'),
+    h('div', { class: 'daynav' },
+      h('button', { class: 'icon-btn', 'aria-label': 'Jour précédent', onClick: () => goDay(addDays(date, -1)) }, icon('back', 18)),
+      h('button', { class: 'day-label', 'aria-label': isToday ? 'Aujourd’hui' : 'Revenir à aujourd’hui', onClick: () => !isToday && goDay(today) },
+        isToday ? 'Aujourd’hui' : formatLong(date)),
+      h('button', { class: 'icon-btn', 'aria-label': 'Jour suivant', disabled: isToday, onClick: () => goDay(addDays(date, 1)) }, icon('chevron', 18))),
+    iconButton('sliders', 'Réglages', () => navigate('/settings'), 'glass-btn'));
 
-  const page = h('main', { class: 'page home-page' });
+  // --- Salutation, message et flamme ---
+  const message = h('p', { class: 'greet-msg' });
+  const flame = h('button', { class: 'flame', 'aria-label': 'Série de jours parfaits', onClick: () => {
+    const n = perfectStreak(state.days, today, { goals, sessionDays });
+    toast(n ? `${n} jour${n > 1 ? 's' : ''} parfait${n > 1 ? 's' : ''} d’affilée 🔥` : 'Jour parfait : tout renseigner + objectif de pas ou une séance', { duration: 3500 });
+  } });
+  const hour = new Date().getHours();
+  const hello = `${hour >= 18 || hour < 4 ? 'Bonsoir' : 'Bonjour'}${state.settings.name ? ` ${state.settings.name}` : ''}`;
+  const greet = h('section', { class: 'greet' }, h('div', { class: 'greet-top' }, h('h1', null, hello), flame), message);
+  refreshers.push(() => {
+    const c = dayChecklist(state.days, date, { goals, sessionDays });
+    const n = perfectStreak(state.days, today, { goals, sessionDays });
+    flame.replaceChildren(icon('flame', 18), h('span', null, n));
+    flame.classList.toggle('lit', n > 0);
+    message.textContent = greetingMessage(c, isToday);
+  });
+
+  const page = h('main', { class: 'page home-page' }, greet);
 
   // --- Bannières (installation, sauvegarde) ---
   if (isIOS() && !isStandalone() && !sessionStorage.getItem('installDismissed')) {
@@ -57,101 +100,194 @@ export default function home(root, dateParam) {
       iconButton('x', 'Masquer', () => { sessionStorage.setItem('installDismissed', '1'); b.remove(); }));
     page.append(b);
   }
-  const dataCount = state.days.size + state.sessions.length;
   const last = state.settings.lastBackupAt;
-  if (isToday && dataCount >= 10 && (!last || Date.now() - last > 14 * 864e5) && !sessionStorage.getItem('backupDismissed')) {
+  if (isToday && state.days.size + state.sessions.length >= 10 && (!last || Date.now() - last > 14 * 864e5) && !sessionStorage.getItem('backupDismissed')) {
     const b = h('div', { class: 'banner glass' }, icon('download', 20),
-      h('div', null, h('b', null, 'Pense à sauvegarder. '), last ? `Dernière ${agoLabel(dateKey(new Date(last)))}. ` : '',
-        h('button', { class: 'link-btn', onClick: () => navigate('/settings') }, 'Exporter')),
+      h('div', null, h('b', null, 'Pense à sauvegarder. '), h('button', { class: 'link-btn', onClick: () => navigate('/settings') }, 'Exporter')),
       iconButton('x', 'Masquer', () => { sessionStorage.setItem('backupDismissed', '1'); b.remove(); }));
     page.append(b);
   }
 
-  // --- Briques ---
-  /** Carte de rubrique : titre à gauche, icône de courbe cliquable à droite. */
-  function card(color, iconName, title, { meta, chartTo, chartLabel }, ...body) {
-    return h('section', { class: 'card glass home-card', style: { '--c': color } },
-      h('div', { class: 'hc-head' },
-        h('div', { class: 'card-icon' }, icon(iconName)),
-        h('h2', null, title),
-        meta || null,
-        h('div', { class: 'spacer' }),
-        h('button', { class: 'chart-btn', 'aria-label': chartLabel, title: chartLabel, onClick: () => navigate(chartTo) }, icon('chart', 18))),
-      body);
+  // --- Rubrique repliable ---
+  function rubric({ id, color, iconName, title, summary, done, alert, chartTo, body, open }) {
+    const key = `rubric:${id}`;
+    const stored = sessionStorage.getItem(key);
+    let isOpen = stored != null ? stored === '1' : !!open;
+    const sum = h('span', { class: 'rb-sum' });
+    const status = h('span', { class: 'rb-status', 'aria-hidden': 'true' });
+    const el = h('section', { class: 'card glass rubric', style: { '--c': color } });
+    let head;
+    const setOpen = (v) => {
+      isOpen = v;
+      el.classList.toggle('open', v);
+      head.setAttribute('aria-expanded', String(v));
+      sessionStorage.setItem(key, v ? '1' : '0');
+    };
+    head = h('div', {
+      class: 'rb-head', role: 'button', tabindex: '0', 'aria-expanded': String(isOpen),
+      onClick: () => setOpen(!isOpen),
+      onKeydown: (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          setOpen(!isOpen);
+        }
+      },
+    },
+      h('div', { class: 'card-icon' }, icon(iconName)),
+      h('h2', null, title),
+      sum,
+      status,
+      chartTo ? h('button', { class: 'chart-btn', 'aria-label': `Courbes : ${title}`, onClick: (e) => { e.stopPropagation(); navigate(chartTo); } }, icon('chart', 17)) : null,
+      h('button', { class: 'rb-arrow', 'aria-label': 'Replier ou déplier', onClick: (e) => { e.stopPropagation(); setOpen(!isOpen); } }, icon('down', 18)));
+    el.append(head, h('div', { class: 'rb-body' }, h('div', { class: 'rb-inner' }, body)));
+    refreshers.push(() => {
+      sum.replaceChildren(summary() ?? '');
+      const isDone = done();
+      const isAlert = !isDone && !!alert?.();
+      status.className = `rb-status ${isDone ? 'ok' : isAlert ? 'alert' : ''}`;
+      status.replaceChildren(isDone ? icon('check', 13) : isAlert ? '!' : '');
+      el.classList.toggle('needs', isAlert);
+    });
+    setOpen(isOpen);
+    return el;
   }
 
-  /** Champ numérique avec unité, étiquette, pourcentage de l'objectif et barre de progression. */
-  function metricField(field, label, unit, placeholder) {
+  /** Champ numérique avec unité, étiquette, pourcentage de l'objectif et barre. */
+  function metricField(field, label, unit, placeholder, { decimal = false, goal = goals[field] } = {}) {
     const m = METRICS[field];
-    const goal = goals[field];
     const pct = h('span', { class: 'mf-pct' });
     const bar = h('i');
     const update = (v) => {
       if (!goal) return;
       const ratio = (v || 0) / goal;
       bar.style.width = `${Math.min(100, ratio * 100)}%`;
-      pct.textContent = v == null ? '' : meetsGoal(v, goal, m.goalType) ? '✓' : `${fmtNum(Math.round(ratio * 100))} %`;
-      pct.classList.toggle('ok', meetsGoal(v, goal, m.goalType));
+      const ok = meetsGoal(v, goal, m.goalType);
+      pct.textContent = v == null ? '' : ok ? '✓' : `${fmtNum(Math.round(ratio * 100))} %`;
+      pct.classList.toggle('ok', ok);
     };
+    const v0 = day()[field];
     const input = numInput({
-      value: day[field] ?? '', placeholder, label,
+      value: v0 != null ? String(v0).replace('.', ',') : '', placeholder, label, decimal,
       onInput: (e) => {
         const v = parseNum(e.target.value);
-        const clean = v == null ? null : Math.max(0, Math.round(v));
+        const clean = v == null ? null : decimal ? Math.round(Math.max(0, v) * 10) / 10 : Math.max(0, Math.round(v));
         update(clean);
         save(field, clean);
       },
     });
-    update(day[field] ?? null);
+    update(v0 ?? null);
     return h('div', { class: 'mf', style: { '--c': m.color } },
       h('div', { class: 'mf-label' }, h('span', null, label), pct),
       h('div', { class: 'with-unit' }, input, h('span', { class: 'unit' }, unit)),
       goal ? h('div', { class: 'progress', title: `Objectif : ${m.fmt(goal)}` }, bar) : null);
   }
 
-  // --- Sommeil : durée + qualité sur une ligne ---
-  const hIn = numInput({ value: day.sleepMin != null ? Math.floor(day.sleepMin / 60) : '', placeholder: '7', label: 'Heures de sommeil', maxLength: 2, onInput: () => saveSleep() });
-  const mIn = numInput({ value: day.sleepMin != null ? String(day.sleepMin % 60).padStart(2, '0') : '', placeholder: '30', label: 'Minutes de sommeil', maxLength: 2, onInput: () => saveSleep() });
+  const d0 = day();
+
+  // --- Sommeil ---
+  const hIn = numInput({ value: d0.sleepMin != null ? Math.floor(d0.sleepMin / 60) : '', placeholder: '7', label: 'Heures de sommeil', maxLength: 2, onInput: () => saveSleep() });
+  const mIn = numInput({ value: d0.sleepMin != null ? String(d0.sleepMin % 60).padStart(2, '0') : '', placeholder: '30', label: 'Minutes de sommeil', maxLength: 2, onInput: () => saveSleep() });
   function saveSleep() {
     const hh = parseNum(hIn.value);
     const mm = parseNum(mIn.value);
     if (hh == null && mm == null) return save('sleepMin', null);
     save('sleepMin', Math.min(24 * 60, Math.max(0, (hh || 0) * 60 + Math.min(59, mm || 0))));
   }
-  let quality = day.sleepQ ?? null;
-  const qMeta = h('span', { class: 'hc-meta' });
+  let quality = d0.sleepQ ?? null;
   const qWrap = h('div', { class: 'quality', role: 'radiogroup', 'aria-label': 'Qualité du sommeil sur 5' });
   const renderQuality = () => {
-    qMeta.textContent = quality ? QUALITY_LABELS[quality] : '';
     qWrap.replaceChildren(...[1, 2, 3, 4, 5].map((n) =>
       h('button', {
         class: `q-dot ${quality && n <= quality ? 'on' : ''} ${n === quality ? 'sel' : ''}`,
         role: 'radio', 'aria-checked': String(n === quality), 'aria-label': `${n} sur 5 : ${QUALITY_LABELS[n]}`,
-        onClick: () => {
-          quality = quality === n ? null : n;
-          renderQuality();
-          saveNow('sleepQ', quality);
-        },
+        onClick: () => { quality = quality === n ? null : n; renderQuality(); haptic(); saveNow('sleepQ', quality); },
       }, n)));
   };
   renderQuality();
-  page.append(card('var(--c-sleep)', 'moon', 'Sommeil', { meta: qMeta, chartTo: '/metric/sommeil', chartLabel: 'Courbes du sommeil' },
-    h('div', { class: 'sleep-row' },
-      h('div', { class: 'duration' }, hIn, h('span', { class: 'unit' }, 'h'), mIn, h('span', { class: 'unit' }, 'min')),
-      qWrap)));
+  page.append(rubric({
+    id: 'sleep', color: 'var(--c-sleep)', iconName: 'moon', title: 'Sommeil', chartTo: '/metric/sommeil',
+    summary: () => {
+      const d = day();
+      if (d.sleepMin == null && d.sleepQ == null) return null;
+      return [d.sleepMin != null ? fmtSleep(d.sleepMin) : '', d.sleepQ ? `${d.sleepQ}/5` : ''].filter(Boolean).join(' · ');
+    },
+    done: () => day().sleepMin != null && day().sleepQ != null,
+    body: [
+      h('div', { class: 'sleep-row' },
+        h('div', { class: 'duration' }, hIn, h('span', { class: 'unit' }, 'h'), mIn, h('span', { class: 'unit' }, 'min')),
+        qWrap),
+      h('div', { class: 'rb-hint' }, 'Durée de la nuit, puis qualité de 1 à 5'),
+    ],
+  }));
 
-  // --- Nutrition : calories et protéines côte à côte ---
-  page.append(card('var(--c-kcal)', 'flame', 'Nutrition', { chartTo: '/metric/nutrition', chartLabel: 'Courbes de nutrition' },
-    h('div', { class: 'mf-grid' },
+  // --- Humeur ---
+  let mood = d0.mood ?? null;
+  const moodWrap = h('div', { class: 'moods', role: 'radiogroup', 'aria-label': 'Humeur du jour' });
+  const moodLabel = h('div', { class: 'rb-hint' });
+  const renderMood = () => {
+    moodLabel.textContent = mood ? MOODS[mood].label : 'Comment tu te sens aujourd’hui ?';
+    moodWrap.replaceChildren(...[1, 2, 3, 4, 5].map((n) =>
+      h('button', {
+        class: `mood ${n === mood ? 'sel' : ''}`, role: 'radio', 'aria-checked': String(n === mood), 'aria-label': MOODS[n].label,
+        onClick: () => { mood = mood === n ? null : n; renderMood(); haptic(); saveNow('mood', mood); },
+      }, MOODS[n].emoji)));
+  };
+  renderMood();
+  const note = h('textarea', { class: 'text-input mood-note', rows: 2, maxlength: 280, placeholder: 'Un mot sur ta journée (facultatif)' }, d0.moodNote || '');
+  note.addEventListener('input', () => save('moodNote', note.value.trim() || null));
+  page.append(rubric({
+    id: 'mood', color: 'var(--c-mood)', iconName: 'smile', title: 'Humeur', chartTo: '/metric/humeur',
+    summary: () => (day().mood ? MOODS[day().mood].emoji : null),
+    done: () => day().mood != null,
+    body: [moodWrap, moodLabel, note],
+  }));
+
+  // --- Poids (rappel tous les 3 jours) ---
+  const lastW = lastValueBefore(state.days, 'weight', date);
+  const weightDue = weightRequired(state.days, date);
+  page.append(rubric({
+    id: 'weight', color: 'var(--c-weight)', iconName: 'scale', title: 'Poids', chartTo: '/metric/poids',
+    open: weightDue && isToday && d0.weight == null,
+    summary: () => {
+      const w = day().weight;
+      if (w != null) return METRICS.weight.fmt(w);
+      if (weightDue) return 'À renseigner';
+      return lastW ? `${METRICS.weight.fmt(lastW.value)} · ${agoLabel(lastW.key, date)}` : null;
+    },
+    done: () => day().weight != null,
+    alert: () => weightDue,
+    body: [
+      metricField('weight', isToday ? 'Ce matin' : 'Ce jour-là', 'kg', lastW ? String(lastW.value).replace('.', ',') : '75', { decimal: true, goal: null }),
+      h('div', { class: 'rb-hint' },
+        lastW ? `Dernière pesée : ${METRICS.weight.fmt(lastW.value)} · ${agoLabel(lastW.key, date)}. ` : 'Idéalement le matin, à jeun. ',
+        'Rappel tous les 3 jours.'),
+    ],
+  }));
+
+  // --- Nutrition ---
+  page.append(rubric({
+    id: 'nutrition', color: 'var(--c-kcal)', iconName: 'flame', title: 'Nutrition', chartTo: '/metric/nutrition',
+    summary: () => {
+      const d = day();
+      if (d.kcal == null && d.prot == null) return null;
+      return [d.kcal != null ? `${fmtNum(d.kcal)} kcal` : '', d.prot != null ? `${fmtNum(d.prot)} g` : ''].filter(Boolean).join(' · ');
+    },
+    done: () => day().kcal != null && day().prot != null,
+    body: h('div', { class: 'mf-grid' },
       metricField('kcal', 'Calories', 'kcal', String(goals.kcal || 2500)),
-      metricField('prot', 'Protéines', 'g', String(goals.prot || 150)))));
+      metricField('prot', 'Protéines', 'g', String(goals.prot || 150))),
+  }));
 
   // --- Pas ---
-  page.append(card('var(--c-steps)', 'steps', 'Pas', { chartTo: '/metric/pas', chartLabel: 'Courbes des pas' },
-    metricField('steps', isToday ? 'Aujourd’hui' : 'Ce jour-là', 'pas', String(goals.steps || 8000))));
+  page.append(rubric({
+    id: 'steps', color: 'var(--c-steps)', iconName: 'steps', title: 'Pas', chartTo: '/metric/pas',
+    summary: () => (day().steps != null ? fmtNum(day().steps) : null),
+    done: () => day().steps != null,
+    body: metricField('steps', isToday ? 'Aujourd’hui' : 'Ce jour-là', 'pas', String(goals.steps || 8000)),
+  }));
 
   // --- Entraînement de la semaine ---
-  page.append(weekCard(date, today, card));
+  page.append(trainingRubric(rubric, date, today, sessionDays));
 
   // --- Bouton S'entraîner ---
   const active = activeSession();
@@ -166,6 +302,7 @@ export default function home(root, dateParam) {
     timer = setInterval(tick, 1000);
   }
 
+  refresh();
   root.append(h('div', { class: 'home-bg', 'aria-hidden': 'true' }), h('div', { class: 'view has-cta' }, header, page), h('div', { class: 'cta-bar' }, cta));
 
   return () => {
@@ -176,11 +313,11 @@ export default function home(root, dateParam) {
   };
 }
 
-function weekCard(date, today, card) {
+function trainingRubric(rubric, date, today, sessionDays) {
   const ws = weekStart(date);
   const keys = Array.from({ length: 7 }, (_, i) => addDays(ws, i));
-  const byDay = new Map(); // jour -> nombre de séances
-  const colorOf = new Map(); // jour -> couleur de la séance
+  const byDay = new Map();
+  const colorOf = new Map();
   for (const s of doneSessions()) {
     const k = dateKey(new Date(s.startedAt));
     if (k < ws || k > keys[6]) continue;
@@ -189,10 +326,17 @@ function weekCard(date, today, card) {
   }
   const count = [...byDay.values()].reduce((a, b) => a + b, 0);
   const target = state.settings.goals.sessionsPerWeek;
-  return card('var(--accent)', 'dumbbell', 'Entraînement',
-    { meta: h('span', { class: 'hc-meta tnum' }, `${count} / ${target} cette semaine`), chartTo: '/history', chartLabel: 'Historique et progression' },
-    h('div', { class: 'week-dots' },
-      keys.map((k) => h('div', { class: `week-dot ${byDay.get(k) ? 'done' : ''} ${k === today ? 'today' : ''}`, style: colorOf.has(k) ? { '--tc': colorOf.get(k) } : null },
-        h('span', null, formatWeekday(k).slice(0, 1).toUpperCase()),
-        h('i', null, byDay.get(k) ? icon('check', 14) : null)))));
+  const lastS = doneSessions()[0];
+  return rubric({
+    id: 'training', color: 'var(--accent)', iconName: 'dumbbell', title: 'Entraînement', chartTo: '/history',
+    summary: () => `${count}/${target} cette semaine`,
+    done: () => sessionDays.has(date),
+    body: [
+      h('div', { class: 'week-dots' },
+        keys.map((k) => h('div', { class: `week-dot ${byDay.get(k) ? 'done' : ''} ${k === today ? 'today' : ''}`, style: colorOf.has(k) ? { '--tc': colorOf.get(k) } : null },
+          h('span', null, formatWeekday(k).slice(0, 1).toUpperCase()),
+          h('i', null, byDay.get(k) ? icon('check', 14) : null)))),
+      h('div', { class: 'rb-hint' }, lastS ? `Dernière : ${lastS.name} · ${agoLabel(dateKey(new Date(lastS.startedAt)), today)}` : 'Aucune séance pour l’instant.'),
+    ],
+  });
 }

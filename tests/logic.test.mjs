@@ -8,7 +8,7 @@ import {
   e1rm, planGroup, warmupPlan, createSession, nextPending, restAfter, lastPerformance,
   propagateWeight, pruneSession, normalizeWarmups, sessionStats, sessionRecords, suggestTemplate, exerciseRecords,
 } from '../js/core/training.js';
-import { periodData, summary, streak, meetsGoal, rollingAvg } from '../js/core/metrics.js';
+import { periodData, summary, streak, meetsGoal, rollingAvg, weightRequired, dayChecklist, perfectStreak, lastValueBefore } from '../js/core/metrics.js';
 import { SEED_EXERCISES, seedTemplates } from '../js/data/seed.js';
 
 const exercises = new Map(SEED_EXERCISES.map((e) => [e.id, e]));
@@ -265,4 +265,57 @@ test('première fois : la charge de travail est déduite de l’échauffement', 
   Object.assign(r2.sets[0], { w: 40, r: 8, done: true });
   propagateWeight(r2, 0);
   assert.deepEqual(r2.sets.filter((x) => x.kind === 'work').map((x) => x.pw), [100, 100, 100]);
+});
+
+// --- Poids, jour parfait, flamme ---
+const full = (extra = {}) => ({ sleepMin: 450, sleepQ: 4, mood: 4, kcal: 2500, prot: 150, steps: 6000, ...extra });
+
+test('rappel du poids tous les 3 jours', () => {
+  const days = new Map([['2026-11-20', { weight: 78.4 }]]);
+  assert.equal(lastValueBefore(days, 'weight', '2026-11-22').value, 78.4);
+  assert.equal(weightRequired(days, '2026-11-21'), false);
+  assert.equal(weightRequired(days, '2026-11-22'), false);
+  assert.equal(weightRequired(days, '2026-11-23'), true); // 3 jours après
+  assert.equal(weightRequired(new Map(), '2026-11-23'), true); // jamais pesé
+});
+
+test('jour parfait : données complètes + pas OU séance', () => {
+  const goals = { steps: 10000 };
+  const d = '2026-11-27';
+  const base = new Map([['2026-11-26', { weight: 78 }]]);
+  // données complètes, 6000 pas, pas de séance -> pas parfait
+  base.set(d, full());
+  let c = dayChecklist(base, d, { goals });
+  assert.equal(c.dataOk, true);
+  assert.equal(c.perfect, false);
+  assert.equal(c.stepsLeft, 4000);
+  // avec une séance -> parfait
+  assert.equal(dayChecklist(base, d, { goals, sessionDays: new Set([d]) }).perfect, true);
+  // avec l'objectif de pas -> parfait
+  base.set(d, full({ steps: 10500 }));
+  assert.equal(dayChecklist(base, d, { goals }).perfect, true);
+  // humeur manquante -> pas parfait, et listée
+  base.set(d, full({ steps: 10500, mood: undefined }));
+  c = dayChecklist(base, d, { goals });
+  assert.equal(c.perfect, false);
+  assert.deepEqual(c.missing, ['humeur']);
+  // poids demandé (dernière pesée il y a 3 j) -> requis
+  const w = new Map([['2026-11-24', { weight: 78 }], [d, full({ steps: 10500 })]]);
+  c = dayChecklist(w, d, { goals });
+  assert.deepEqual(c.missing, ['poids']);
+});
+
+test('flamme : jours parfaits consécutifs', () => {
+  const goals = { steps: 8000 };
+  const days = new Map();
+  for (const k of ['2026-11-24', '2026-11-25', '2026-11-26']) days.set(k, full({ steps: 9000, weight: 78 }));
+  // aujourd'hui pas encore parfait : la série court jusqu'à hier
+  days.set('2026-11-27', { sleepMin: 400 });
+  assert.equal(perfectStreak(days, '2026-11-27', { goals }), 3);
+  // aujourd'hui parfait grâce à une séance
+  days.set('2026-11-27', full({ steps: 2000 }));
+  assert.equal(perfectStreak(days, '2026-11-27', { goals, sessionDays: new Set(['2026-11-27']) }), 4);
+  // un trou casse la série
+  days.delete('2026-11-25');
+  assert.equal(perfectStreak(days, '2026-11-27', { goals, sessionDays: new Set(['2026-11-27']) }), 2);
 });

@@ -6,9 +6,10 @@ import { SEED_EXERCISES, SEED_VERSION, TEMPLATE_COLORS, seedTemplates } from '..
 import { clone, mergeDeep, uid } from './util.js';
 import { normalizeWarmups } from './training.js';
 
-export const DAY_FIELDS = ['sleepMin', 'sleepQ', 'kcal', 'prot', 'steps'];
+export const DAY_FIELDS = ['sleepMin', 'sleepQ', 'kcal', 'prot', 'steps', 'weight', 'mood', 'moodNote'];
 
 export const DEFAULT_SETTINGS = {
+  name: 'Lucas', // prénom affiché dans le message d'accueil
   goals: { sleepMin: 480, kcal: 2600, prot: 150, steps: 10000, sessionsPerWeek: 4 },
   bodyweight: null, // kg, utilisé pour les exercices au poids du corps / lestés
   sound: true,
@@ -233,7 +234,7 @@ export function exportData() {
 
 export async function importData(data) {
   if (!data || data.app !== 'lifestyleApp' || !Array.isArray(data.sessions)) {
-    throw new Error("Ce fichier n'est pas une sauvegarde Lifestyle valide.");
+    throw new Error("Ce fichier n'est pas une sauvegarde Eclipse valide.");
   }
   const arrays = ['days', 'exercises', 'templates', 'sessions'];
   for (const k of arrays) {
