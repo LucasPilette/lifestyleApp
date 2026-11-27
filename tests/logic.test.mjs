@@ -8,7 +8,7 @@ import {
   e1rm, planGroup, warmupPlan, createSession, nextPending, restAfter, lastPerformance,
   propagateWeight, pruneSession, normalizeWarmups, sessionStats, sessionRecords, suggestTemplate, exerciseRecords,
 } from '../js/core/training.js';
-import { periodData, summary, streak, meetsGoal, rollingAvg, weightRequired, dayChecklist, perfectStreak, lastValueBefore } from '../js/core/metrics.js';
+import { periodData, summary, streak, meetsGoal, rollingAvg, weightRequired, dayChecklist, perfectStreak, lastValueBefore, weekTraining } from '../js/core/metrics.js';
 import { SEED_EXERCISES, seedTemplates } from '../js/data/seed.js';
 
 const exercises = new Map(SEED_EXERCISES.map((e) => [e.id, e]));
@@ -279,43 +279,42 @@ test('rappel du poids tous les 3 jours', () => {
   assert.equal(weightRequired(new Map(), '2026-11-23'), true); // jamais pesé
 });
 
-test('jour parfait : données complètes + pas OU séance', () => {
-  const goals = { steps: 10000 };
+test('jour parfait : sommeil + nutrition + humeur (pas et poids facultatifs)', () => {
   const d = '2026-11-27';
-  const base = new Map([['2026-11-26', { weight: 78 }]]);
-  // données complètes, 6000 pas, pas de séance -> pas parfait
-  base.set(d, full());
-  let c = dayChecklist(base, d, { goals });
-  assert.equal(c.dataOk, true);
-  assert.equal(c.perfect, false);
-  assert.equal(c.stepsLeft, 4000);
-  // avec une séance -> parfait
-  assert.equal(dayChecklist(base, d, { goals, sessionDays: new Set([d]) }).perfect, true);
-  // avec l'objectif de pas -> parfait
-  base.set(d, full({ steps: 10500 }));
-  assert.equal(dayChecklist(base, d, { goals }).perfect, true);
-  // humeur manquante -> pas parfait, et listée
-  base.set(d, full({ steps: 10500, mood: undefined }));
-  c = dayChecklist(base, d, { goals });
+  const days = new Map([[d, full({ steps: undefined })]]);
+  let c = dayChecklist(days, d);
+  assert.equal(c.perfect, true); // pas de pas, pas de poids : parfait quand même
+  assert.equal(c.done, 3);
+  days.set(d, full({ mood: undefined }));
+  c = dayChecklist(days, d);
   assert.equal(c.perfect, false);
   assert.deepEqual(c.missing, ['humeur']);
-  // poids demandé (dernière pesée il y a 3 j) -> requis
-  const w = new Map([['2026-11-24', { weight: 78 }], [d, full({ steps: 10500 })]]);
-  c = dayChecklist(w, d, { goals });
-  assert.deepEqual(c.missing, ['poids']);
+  days.set(d, { sleepMin: 450 }); // qualité manquante
+  assert.deepEqual(dayChecklist(days, d).missing, ['sommeil', 'nutrition', 'humeur']);
 });
 
-test('flamme : jours parfaits consécutifs', () => {
-  const goals = { steps: 8000 };
+test('flamme : jours parfaits, éteinte par une semaine terminée à moins de 3 séances', () => {
+  // vendredi 27/11/2026 ; semaine courante = lundi 23/11 ; semaine précédente = 16-22/11
+  const today = '2026-11-27';
   const days = new Map();
-  for (const k of ['2026-11-24', '2026-11-25', '2026-11-26']) days.set(k, full({ steps: 9000, weight: 78 }));
-  // aujourd'hui pas encore parfait : la série court jusqu'à hier
-  days.set('2026-11-27', { sleepMin: 400 });
-  assert.equal(perfectStreak(days, '2026-11-27', { goals }), 3);
-  // aujourd'hui parfait grâce à une séance
-  days.set('2026-11-27', full({ steps: 2000 }));
-  assert.equal(perfectStreak(days, '2026-11-27', { goals, sessionDays: new Set(['2026-11-27']) }), 4);
-  // un trou casse la série
-  days.delete('2026-11-25');
-  assert.equal(perfectStreak(days, '2026-11-27', { goals, sessionDays: new Set(['2026-11-27']) }), 2);
+  for (let i = 0; i < 12; i++) days.set(addDays(today, -i), full()); // du 16/11 au 27/11
+  const prevWeek3 = ['2026-11-16', '2026-11-18', '2026-11-20'];
+  // semaine précédente avec 3 séances, semaine en cours avec 0 (non pénalisée) -> 12 jours
+  assert.equal(perfectStreak(days, today, { sessionDates: prevWeek3, minSessions: 3 }), 12);
+  // semaine précédente avec seulement 2 séances -> la flamme repart de lundi 23/11 : 5 jours
+  assert.equal(perfectStreak(days, today, { sessionDates: prevWeek3.slice(0, 2), minSessions: 3 }), 5);
+  // semaine de démarrage de l'app épargnée
+  assert.equal(perfectStreak(days, today, { sessionDates: [], minSessions: 3, graceUntil: '2026-11-17' }), 12);
+  // aujourd'hui pas encore renseigné : la série court jusqu'à hier
+  days.set(today, { sleepMin: 400 });
+  assert.equal(perfectStreak(days, today, { sessionDates: prevWeek3, minSessions: 3 }), 11);
+  // un jour incomplet casse la série
+  days.set('2026-11-25', { mood: 3 });
+  assert.equal(perfectStreak(days, today, { sessionDates: prevWeek3, minSessions: 3 }), 1);
+});
+
+test('semaine d’entraînement : séances restantes et jours restants', () => {
+  const wk = weekTraining(['2026-11-23', '2026-11-25', '2026-11-18'], '2026-11-27', 3);
+  assert.deepEqual(wk, { count: 2, min: 3, needed: 1, daysLeft: 3 }); // ven., sam., dim.
+  assert.equal(weekTraining([], '2026-11-29', 3).daysLeft, 1); // dimanche
 });

@@ -10,7 +10,7 @@ export const DAY_FIELDS = ['sleepMin', 'sleepQ', 'kcal', 'prot', 'steps', 'weigh
 
 export const DEFAULT_SETTINGS = {
   name: 'Lucas', // prénom affiché dans le message d'accueil
-  goals: { sleepMin: 480, kcal: 2600, prot: 150, steps: 10000, sessionsPerWeek: 4 },
+  goals: { sleepMin: 480, kcal: 2600, prot: 150, steps: 10000, minSessions: 3 }, // minSessions : minimum hebdo pour garder la flamme
   bodyweight: null, // kg, utilisé pour les exercices au poids du corps / lestés
   sound: true,
   countdown: true, // bips à 3-2-1 secondes

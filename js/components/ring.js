@@ -1,5 +1,5 @@
 // Anneau du jour (double anneau façon « activity rings ») :
-// extérieur = données renseignées, intérieur = activité (pas ou séance).
+// extérieur = priorités du jour renseignées, intérieur = séances de la semaine / minimum.
 
 import { s } from '../core/dom.js';
 
@@ -28,9 +28,9 @@ export function dayRings({ data, activity }) {
   const svg = s('svg', { class: 'day-rings', viewBox: '0 0 100 100', 'aria-hidden': 'true' },
     s('defs', null,
       s('linearGradient', { id: `rg-o-${id}`, x1: '0', y1: '0', x2: '1', y2: '1' },
-        s('stop', { offset: '0%', 'stop-color': '#ff3b4a' }), s('stop', { offset: '100%', 'stop-color': '#ff9f43' })),
+        s('stop', { offset: '0%', 'stop-color': '#ff2d48' }), s('stop', { offset: '100%', 'stop-color': '#ff7a45' })),
       s('linearGradient', { id: `rg-i-${id}`, x1: '0', y1: '1', x2: '1', y2: '0' },
-        s('stop', { offset: '0%', 'stop-color': '#2ee59d' }), s('stop', { offset: '100%', 'stop-color': '#c6f432' }))),
+        s('stop', { offset: '0%', 'stop-color': '#ffb340' }), s('stop', { offset: '100%', 'stop-color': '#ffe08a' }))),
     arc(42, 11, data, `url(#rg-o-${id})`),
     arc(28.5, 11, activity, `url(#rg-i-${id})`));
   return svg;

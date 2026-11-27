@@ -10,10 +10,9 @@ Application web installable (PWA), hébergée gratuitement sur GitHub Pages, qui
   la journée, flamme 🔥 des jours parfaits d'affilée. Rubriques repliables (titre coloré + résumé) : sommeil
   (durée, qualité /5), humeur (5 émojis + note), poids (rappel tous les 3 jours), nutrition, pas, entraînement.
   L'icône de courbe d'une rubrique ouverte mène à son suivi. Flèches pour corriger les jours passés.
-- **Jour parfait** : toutes les données demandées renseignées (poids seulement les jours de rappel) et
-  objectif de pas atteint *ou* séance faite.
-- **Suivi détaillé** : graphiques sur 30 jours (avec moyenne glissante), par semaine et par mois ; objectif
-  atteint (%), série en cours, min/max. Glisser le doigt sur un graphique affiche les valeurs.
+- **Jour parfait** : sommeil, nutrition et humeur renseignés (pas et poids facultatifs). L'anneau du jour
+  montre ces saisies (rouge) et les séances de la semaine (or). Une semaine terminée avec moins de 3 séances
+  (réglable) éteint la flamme ; les jours de repos ne pénalisent pas.
 - **S'entraîner** : choix de la séance (la suivante du programme est suggérée), puis accompagnement :
   - chrono de séance, écran maintenu allumé ;
   - charges et reps proposées d'après la dernière fois (même séance en priorité), puis d'après tes premières séries ;

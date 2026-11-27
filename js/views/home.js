@@ -4,7 +4,7 @@
 import { h, icon, iconButton, numInput } from '../core/dom.js';
 import { state, getDay, setDayField, activeSession, doneSessions, sessionColor, updateSettings } from '../core/store.js';
 import { todayKey, addDays, formatLong, weekStart, dateKey, agoLabel, formatWeekday } from '../core/date.js';
-import { METRICS, MOODS, meetsGoal, dayChecklist, perfectStreak, weightRequired, lastValueBefore } from '../core/metrics.js';
+import { METRICS, MOODS, meetsGoal, dayChecklist, perfectStreak, weekTraining, weightRequired, lastValueBefore } from '../core/metrics.js';
 import { navigate } from '../core/router.js';
 import { fmtNum, fmtClock, fmtSleep, parseNum } from '../core/format.js';
 import { debounce } from '../core/util.js';
@@ -17,21 +17,31 @@ export const QUALITY_LABELS = ['', 'Très mauvaise', 'Mauvaise', 'Moyenne', 'Bon
 const isIOS = () => /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 export const isStandalone = () => navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
 
+/** Une date par séance terminée (pour compter les séances par semaine). */
+export function sessionDateList() {
+  return doneSessions().map((s) => dateKey(new Date(s.startedAt)));
+}
+
 /** Jours où une séance a été terminée. */
 export function sessionDaySet() {
   return new Set(doneSessions().map((s) => dateKey(new Date(s.startedAt))));
 }
 
-/** Message d'accueil selon l'état de la journée. */
-export function greetingMessage(c, isToday) {
-  if (c.perfect) return isToday ? 'Journée parfaite : tout est renseigné et ton objectif est rempli. 🔥' : 'Journée parfaite. 🔥';
-  if (!isToday) return c.missing.length ? `Il manquait : ${c.missing.join(', ')}.` : 'Ni objectif de pas atteint, ni séance ce jour-là.';
-  if (c.missing.length === c.items.length) return 'Commence par ta nuit et ton humeur du jour.';
-  if (c.missing.length) {
-    const act = c.activityOk ? '' : ' Puis bouge : objectif de pas ou une séance.';
-    return `Il te reste à renseigner : ${c.missing.join(', ')}.${act}`;
+/**
+ * Message d'accueil selon la journée (c = dayChecklist) et la semaine d'entraînement (wk = weekTraining).
+ */
+export function greetingMessage(c, isToday, wk) {
+  if (!isToday) return c.perfect ? 'Journée parfaite. 🔥' : `Il manquait : ${c.missing.join(', ')}.`;
+  const plural = (n, w) => `${n} ${w}${n > 1 ? 's' : ''}`;
+  let training = '';
+  if (wk && wk.needed > 0) {
+    training = wk.needed >= wk.daysLeft
+      ? ` Attention : encore ${plural(wk.needed, 'séance')} d’ici dimanche pour garder ta flamme.`
+      : ` Encore ${plural(wk.needed, 'séance')} cette semaine pour garder ta flamme.`;
   }
-  return `Tout est renseigné ! Plus que ${fmtNum(c.stepsLeft)} pas ou une séance pour une journée parfaite.`;
+  if (c.perfect) return `Journée parfaite. 🔥${training}`;
+  if (c.done === 0) return `Commence par ta nuit, ta nutrition et ton humeur.${training}`;
+  return `Il te reste à renseigner : ${c.missing.join(', ')}.${training}`;
 }
 
 export default function home(root, dateParam) {
@@ -78,31 +88,34 @@ export default function home(root, dateParam) {
   // --- Salutation, message et anneau du jour (flamme au centre) ---
   const message = h('p', { class: 'greet-msg' });
   const legend = h('div', { class: 'ring-legend' });
+  const minSessions = goals.minSessions || 3;
+  const streakOpts = () => ({
+    sessionDates: sessionDateList(),
+    minSessions,
+    graceUntil: state.meta.createdAt ? dateKey(new Date(state.meta.createdAt)) : null,
+  });
   const ringBox = h('button', { class: 'ring-box', onClick: () => {
-    const c = dayChecklist(state.days, date, { goals, sessionDays });
-    const n = perfectStreak(state.days, today, { goals, sessionDays });
+    const n = perfectStreak(state.days, today, streakOpts());
     const streakTxt = n ? `🔥 ${n} jour${n > 1 ? 's' : ''} parfait${n > 1 ? 's' : ''} d’affilée. ` : '';
-    const w = c.items.some((i) => i.id === 'weight') ? ' (poids compris)' : '';
-    toast(`${streakTxt}Jour parfait : tout renseigner${w} + objectif de pas ou une séance.`, { duration: 4500 });
+    toast(`${streakTxt}Jour parfait : sommeil, nutrition et humeur renseignés. Moins de ${minSessions} séances dans la semaine éteint la flamme.`, { duration: 5000 });
   } });
   const hour = new Date().getHours();
   const hello = `${hour >= 18 || hour < 4 ? 'Bonsoir' : 'Bonjour'}${state.settings.name ? ` ${state.settings.name}` : ''}`;
   const greet = h('section', { class: 'greet' }, h('div', { class: 'greet-text' }, h('h1', null, hello), message, legend), ringBox);
   refreshers.push(() => {
-    const c = dayChecklist(state.days, date, { goals, sessionDays });
-    const n = perfectStreak(state.days, today, { goals, sessionDays });
-    const okCount = c.items.filter((i) => i.ok).length;
-    const steps = day().steps || 0;
-    const activity = c.trained ? 1 : goals.steps ? Math.min(1, steps / goals.steps) : 0;
+    const c = dayChecklist(state.days, date);
+    const n = perfectStreak(state.days, today, streakOpts());
+    // semaine du jour affiché (pour un jour passé : sa semaine, comptée jusqu'à dimanche)
+    const wk = weekTraining(sessionDateList(), date, minSessions);
     ringBox.replaceChildren(
-      dayRings({ data: okCount / c.items.length, activity }),
+      dayRings({ data: c.done / c.items.length, activity: Math.min(1, wk.count / minSessions) }),
       h('span', { class: `ring-center ${n > 0 ? 'lit' : ''}` }, icon('flame', 15), h('b', null, n)));
     ringBox.classList.toggle('perfect', c.perfect);
-    ringBox.setAttribute('aria-label', `Saisies ${okCount} sur ${c.items.length}, activité ${Math.round(activity * 100)} %, ${n} jours parfaits d’affilée`);
+    ringBox.setAttribute('aria-label', `Saisies ${c.done} sur ${c.items.length}, ${wk.count} séances sur ${minSessions} cette semaine, ${n} jours parfaits d’affilée`);
     legend.replaceChildren(
-      h('span', { class: 'lg-data' }, h('i'), `Saisies ${okCount}/${c.items.length}`),
-      h('span', { class: 'lg-act' }, h('i'), c.trained ? 'Séance faite' : `Activité ${Math.round(activity * 100)} %`));
-    message.textContent = greetingMessage(c, isToday);
+      h('span', { class: 'lg-data' }, h('i'), `Saisies ${c.done}/${c.items.length}`),
+      h('span', { class: 'lg-act' }, h('i'), `Séances ${Math.min(wk.count, 99)}/${minSessions} sem.`));
+    message.textContent = greetingMessage(c, isToday, wk);
   });
 
   const page = h('main', { class: 'page home-page' }, greet);
@@ -339,11 +352,11 @@ function trainingRubric(rubric, date, today, sessionDays) {
     if (!colorOf.has(k) && sessionColor(s)) colorOf.set(k, sessionColor(s));
   }
   const count = [...byDay.values()].reduce((a, b) => a + b, 0);
-  const target = state.settings.goals.sessionsPerWeek;
+  const target = state.settings.goals.minSessions || 3;
   const lastS = doneSessions()[0];
   return rubric({
     id: 'training', color: 'var(--accent)', iconName: 'dumbbell', title: 'Entraînement', chartTo: '/history',
-    summary: () => `${count}/${target} cette semaine`,
+    summary: () => `${count}/${target} séances`,
     done: () => sessionDays.has(date),
     body: [
       h('div', { class: 'week-dots' },

@@ -65,40 +65,52 @@ export function weightRequired(days, date) {
 
 // --- Jour parfait ------------------------------------------------------------
 /**
- * Bilan d'une journée : toutes les données demandées sont renseignées
- * ET (objectif de pas atteint OU séance faite ce jour-là).
- * @param {Set<string>} sessionDays jours où une séance a été terminée
+ * Jour parfait = les priorités sont renseignées : sommeil (durée + qualité),
+ * nutrition (calories + protéines) et humeur. Les pas et le poids sont facultatifs.
  */
-export function dayChecklist(days, date, { goals = {}, sessionDays = new Set() } = {}) {
+export function dayChecklist(days, date) {
   const d = days.get(date) || {};
   const items = [
     { id: 'sleep', label: 'sommeil', ok: d.sleepMin != null && d.sleepQ != null },
-    { id: 'mood', label: 'humeur', ok: d.mood != null },
     { id: 'nutrition', label: 'nutrition', ok: d.kcal != null && d.prot != null },
-    { id: 'steps', label: 'pas', ok: d.steps != null },
+    { id: 'mood', label: 'humeur', ok: d.mood != null },
   ];
-  if (weightRequired(days, date) || d.weight != null) items.push({ id: 'weight', label: 'poids', ok: d.weight != null });
-  const dataOk = items.every((i) => i.ok);
-  const stepsGoal = goals.steps || 0;
-  const trained = sessionDays.has(date);
-  const stepsOk = stepsGoal > 0 && (d.steps || 0) >= stepsGoal;
-  const activityOk = trained || stepsOk;
-  return {
-    items,
-    missing: items.filter((i) => !i.ok).map((i) => i.label),
-    dataOk,
-    activityOk,
-    trained,
-    stepsLeft: stepsGoal ? Math.max(0, stepsGoal - (d.steps || 0)) : 0,
-    perfect: dataOk && activityOk,
-  };
+  const missing = items.filter((i) => !i.ok).map((i) => i.label);
+  return { items, missing, done: items.length - missing.length, perfect: missing.length === 0 };
 }
 
-/** Jours parfaits consécutifs, jusqu'à aujourd'hui (ou hier si la journée n'est pas encore parfaite). */
-export function perfectStreak(days, today, opts) {
-  let k = dayChecklist(days, today, opts).perfect ? today : addDays(today, -1);
+/** Nombre de séances par semaine (clé = lundi). `sessionDates` : une date par séance. */
+export function weekSessionCounts(sessionDates) {
+  const counts = new Map();
+  for (const k of sessionDates) {
+    const ws = weekStart(k);
+    counts.set(ws, (counts.get(ws) || 0) + 1);
+  }
+  return counts;
+}
+
+/** Entraînement de la semaine en cours : séances faites, restantes pour le minimum, jours restants. */
+export function weekTraining(sessionDates, today, minSessions = 3) {
+  const ws = weekStart(today);
+  const count = weekSessionCounts(sessionDates).get(ws) || 0;
+  return { count, min: minSessions, needed: Math.max(0, minSessions - count), daysLeft: 7 - diffDays(today, ws) };
+}
+
+/**
+ * Flamme : jours parfaits consécutifs, jusqu'à aujourd'hui (ou hier si la journée n'est pas encore parfaite).
+ * Une semaine terminée avec moins de `minSessions` séances éteint la flamme : la série ne remonte pas au-delà.
+ * La semaine en cours n'est jamais pénalisée, ni celles jusqu'à `graceUntil` (début d'utilisation de l'app).
+ */
+export function perfectStreak(days, today, { sessionDates = [], minSessions = 3, graceUntil = null } = {}) {
+  const counts = weekSessionCounts(sessionDates);
+  const curWeek = weekStart(today);
+  const graceWeek = graceUntil ? weekStart(graceUntil) : null;
+  let k = dayChecklist(days, today).perfect ? today : addDays(today, -1);
   let n = 0;
-  while (n < 3650 && dayChecklist(days, k, opts).perfect) {
+  while (n < 3650) {
+    const ws = weekStart(k);
+    const weekFailed = ws < curWeek && !(graceWeek && ws <= graceWeek) && (counts.get(ws) || 0) < minSessions;
+    if (weekFailed || !dayChecklist(days, k).perfect) break;
     n++;
     k = addDays(k, -1);
   }

@@ -100,8 +100,8 @@ export default function settingsView(root) {
       row('Sommeil', null, stepper({ value: g.sleepMin || 480, step: 15, min: 240, max: 720, format: fmtSleep, onChange: (v) => updateSettings({ goals: { sleepMin: v } }) })),
       row('Calories', 'Atteint à ±10 %', goalInput('kcal', 'kcal')),
       row('Protéines', 'Minimum', goalInput('prot', 'g', '72px')),
-      row('Pas', 'Minimum', goalInput('steps', 'pas')),
-      row('Séances par semaine', null, stepper({ value: g.sessionsPerWeek || 4, step: 1, min: 1, max: 14, format: (v) => String(v), onChange: (v) => updateSettings({ goals: { sessionsPerWeek: v } }) }))),
+      row('Pas', 'Facultatif, hors jour parfait', goalInput('steps', 'pas')),
+      row('Séances minimum par semaine', 'En dessous, la semaine éteint la flamme', stepper({ value: g.minSessions || 3, step: 1, min: 1, max: 7, format: (v) => String(v), onChange: (v) => updateSettings({ goals: { minSessions: v } }) }))),
 
     h('div', { class: 'section-title' }, 'Entraînement'),
     h('div', { class: 'list' },
