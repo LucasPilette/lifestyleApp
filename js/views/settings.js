@@ -8,6 +8,9 @@ import { confirmSheet, pageHeader, stepper, toggle, toast } from '../core/ui.js'
 import { agoLabel, dateKey, todayKey } from '../core/date.js';
 import { isStandalone } from './home.js';
 import { VERSION } from '../version.js';
+import { GOAL_ORDER, GOAL_DEFS, evaluateGoal } from '../core/goals.js';
+import { editGoal } from '../components/goal-editor.js';
+import { doneSessions } from '../core/store.js';
 
 export default function settingsView(root) {
   const st = state.settings;
@@ -92,9 +95,27 @@ export default function settingsView(root) {
   const nameInput = h('input', { class: 'text-input', type: 'text', value: st.name || '', placeholder: 'Ton prénom', autocomplete: 'given-name', style: { width: '150px', textAlign: 'right', padding: '8px 12px' } });
   nameInput.addEventListener('input', () => updateSettings({ name: nameInput.value.trim() }));
 
+  // Objectifs à long terme : un appui ouvre le réglage
+  const goalsList = h('div', { class: 'list' });
+  const renderGoals = () => {
+    const ctx = { days: state.days, sessions: doneSessions(), exercises: state.exercises, today: todayKey() };
+    goalsList.replaceChildren(...GOAL_ORDER.map((id) => {
+      const r = evaluateGoal(id, state.settings.objectives?.[id], ctx);
+      const fmt = id === 'sleep' ? fmtSleep : GOAL_DEFS[id].fmt;
+      const value = r.status === 'unset' ? 'À définir' : `${r.dir === 'max' ? '≤ ' : ''}${fmt(r.cfg.target)}`;
+      return h('button', { class: 'row', onClick: async () => { if (await editGoal(id, { current: r.value })) renderGoals(); } },
+        h('div', { class: 'row-main' }, h('div', { class: 'row-title' }, GOAL_DEFS[id].label),
+          h('div', { class: 'row-sub' }, r.value != null ? `Actuel : ${fmt(r.value)}${r.status === 'met' ? ' · atteint ✓' : ''}` : r.sub)),
+        h('span', { class: 'row-end' }, value), icon('chevron', 18, 'chev'));
+    }));
+  };
+  renderGoals();
+
   const page = h('div', { class: 'page' },
     h('div', { class: 'section-title' }, 'Profil'),
     h('div', { class: 'list' }, row('Prénom', 'Pour le message d’accueil', nameInput)),
+    h('div', { class: 'section-title' }, 'Mes objectifs'),
+    goalsList,
     h('div', { class: 'section-title' }, 'Objectifs quotidiens'),
     h('div', { class: 'list' },
       row('Sommeil', null, stepper({ value: g.sleepMin || 480, step: 15, min: 240, max: 720, format: fmtSleep, onChange: (v) => updateSettings({ goals: { sleepMin: v } }) })),

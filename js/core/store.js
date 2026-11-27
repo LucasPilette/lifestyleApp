@@ -6,11 +6,13 @@ import { SEED_EXERCISES, SEED_VERSION, TEMPLATE_COLORS, TEMPLATE_RENAMES, seedTe
 import { clone, mergeDeep, uid } from './util.js';
 import { normalizeWarmups, createSession } from './training.js';
 import { dateKey, parseKey, todayKey } from './date.js';
+import { DEFAULT_OBJECTIVES } from './goals.js';
 
 export const DAY_FIELDS = ['sleepMin', 'sleepQ', 'kcal', 'prot', 'steps', 'weight', 'mood', 'moodNote'];
 
 export const DEFAULT_SETTINGS = {
   name: 'Lucas', // prénom affiché dans le message d'accueil
+  objectives: DEFAULT_OBJECTIVES, // objectifs à long terme (voir core/goals.js)
   goals: { sleepMin: 480, kcal: 2600, prot: 150, steps: 10000, minSessions: 3 }, // minSessions : minimum hebdo pour garder la flamme
   bodyweight: null, // kg, utilisé pour les exercices au poids du corps / lestés
   sound: true,

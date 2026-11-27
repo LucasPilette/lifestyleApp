@@ -14,6 +14,7 @@ import logView from './views/log.js';
 import exerciseView from './views/exercise.js';
 import { programsView, programEditView } from './views/programs.js';
 import settingsView from './views/settings.js';
+import goalsView from './views/goals.js';
 
 route(/^\/$/, homeView);
 route(/^\/day\/(\d{4}-\d{2}-\d{2})$/, homeView);
@@ -27,6 +28,7 @@ route(/^\/exercise\/([\w-]+)$/, exerciseView);
 route(/^\/programs$/, programsView);
 route(/^\/programs\/([\w-]+)$/, programEditView);
 route(/^\/settings$/, settingsView);
+route(/^\/goals$/, goalsView);
 
 // iOS : l'audio doit être débloqué par un geste utilisateur.
 ['touchend', 'click'].forEach((ev) => document.addEventListener(ev, unlockAudio, { passive: true }));

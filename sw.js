@@ -2,7 +2,7 @@
 // Le bloc ci-dessous est régénéré par `node tools/release.mjs` à chaque publication.
 
 // <generated>
-const VERSION = '2026.11.27-a0c472d';
+const VERSION = '2026.11.27-62d7ca7';
 const ASSETS = [
   "./",
   "./css/app.css",
@@ -13,6 +13,7 @@ const ASSETS = [
   "./index.html",
   "./js/components/chart.js",
   "./js/components/exercise-picker.js",
+  "./js/components/goal-editor.js",
   "./js/components/ring.js",
   "./js/components/session-editor.js",
   "./js/core/date.js",
@@ -20,6 +21,7 @@ const ASSETS = [
   "./js/core/dom.js",
   "./js/core/feedback.js",
   "./js/core/format.js",
+  "./js/core/goals.js",
   "./js/core/metrics.js",
   "./js/core/router.js",
   "./js/core/store.js",
@@ -29,6 +31,7 @@ const ASSETS = [
   "./js/data/seed.js",
   "./js/main.js",
   "./js/views/exercise.js",
+  "./js/views/goals.js",
   "./js/views/history.js",
   "./js/views/home.js",
   "./js/views/log.js",

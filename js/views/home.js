@@ -77,13 +77,15 @@ export default function home(root, dateParam) {
   // --- En-tête : date centrée ---
   const goDay = (k) => navigate(k >= today ? '/' : `/day/${k}`, { replace: true });
   const header = h('header', { class: 'topbar home-top' },
-    iconButton('history', 'Historique', () => navigate('/history'), 'glass-btn'),
+    h('div', { class: 'top-left' },
+      iconButton('history', 'Historique', () => navigate('/history'), 'glass-btn'),
+      iconButton('trophy', 'Objectifs', () => navigate('/goals'), 'glass-btn')),
     h('div', { class: 'daynav' },
       h('button', { class: 'icon-btn', 'aria-label': 'Jour précédent', onClick: () => goDay(addDays(date, -1)) }, icon('back', 18)),
       h('button', { class: 'day-label', 'aria-label': isToday ? 'Aujourd’hui' : 'Revenir à aujourd’hui', onClick: () => !isToday && goDay(today) },
         isToday ? 'Aujourd’hui' : formatLong(date)),
       h('button', { class: 'icon-btn', 'aria-label': 'Jour suivant', disabled: isToday, onClick: () => goDay(addDays(date, 1)) }, icon('chevron', 18))),
-    iconButton('sliders', 'Réglages', () => navigate('/settings'), 'glass-btn'));
+    h('div', { class: 'top-right' }, iconButton('sliders', 'Réglages', () => navigate('/settings'), 'glass-btn')));
 
   // --- Salutation, message et anneau du jour (flamme au centre) ---
   const message = h('p', { class: 'greet-msg' });
