@@ -10,10 +10,10 @@ const openSheets = [];
  * @param {(close: Function) => Node|Node[]} build contenu
  * @returns {Function} close
  */
-export function sheet(build, { title, onClose, cls = '' } = {}) {
+export function sheet(build, { title, onClose, cls = '', style } = {}) {
   let closed = false;
   const backdrop = h('div', { class: 'sheet-backdrop', onClick: () => close() });
-  const panel = h('div', { class: `sheet ${cls}`, role: 'dialog', 'aria-modal': 'true', 'aria-label': title || '' });
+  const panel = h('div', { class: `sheet ${cls}`, style, role: 'dialog', 'aria-modal': 'true', 'aria-label': title || '' });
   const wrap = h('div', { class: 'sheet-wrap' }, backdrop, panel);
 
   function close(result) {

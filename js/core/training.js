@@ -291,7 +291,19 @@ export function restAfter(session, bi, ii, si, settings = {}) {
  */
 export function propagateWeight(item, si) {
   const ref = item.sets[si];
-  if (ref.kind === 'warmup') return; // l'échauffement est plus léger : rien à propager
+  if (ref.kind === 'warmup') {
+    // Première fois sur l'exercice (aucune charge proposée) : l'échauffement vaut ~60 %,
+    // on en déduit une charge de travail pour le premier groupe de séries.
+    if (!ref.w) return;
+    const first = item.sets.find((s) => s.kind === 'work');
+    if (!first) return;
+    const guess = roundTo(ref.w / WARMUP_PCT, 2.5);
+    for (const s of item.sets) {
+      if (s.kind !== 'work' || s.tag !== first.tag) continue;
+      if (!s.done && s.w == null && s.pw == null) s.pw = guess;
+    }
+    return;
+  }
   for (let j = si + 1; j < item.sets.length; j++) {
     const s = item.sets[j];
     if (s.kind !== ref.kind || s.tag !== ref.tag) break;

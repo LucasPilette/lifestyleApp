@@ -1,4 +1,4 @@
-import { initStore } from './core/store.js';
+import { initStore, activeSession } from './core/store.js';
 import { route, startRouter } from './core/router.js';
 import { toast } from './core/ui.js';
 import { unlockAudio } from './core/feedback.js';
@@ -57,6 +57,11 @@ function registerServiceWorker() {
   if (local) return; // pas de cache pendant le développement
   navigator.serviceWorker.register('./sw.js').then((reg) => {
     const promptUpdate = (worker) => {
+      // Hors séance : mise à jour immédiate et silencieuse (les données sont dans IndexedDB, rien n'est perdu).
+      if (!activeSession()) {
+        worker.postMessage('skipWaiting');
+        return;
+      }
       toast('Nouvelle version disponible', {
         action: 'Mettre à jour',
         duration: 15000,

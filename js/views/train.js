@@ -1,7 +1,7 @@
 // Choix de la séance à lancer.
 
 import { h, icon } from '../core/dom.js';
-import { state, activeSession, doneSessions, exerciseName, saveSession, deleteSession } from '../core/store.js';
+import { state, activeSession, doneSessions, exerciseName, saveSession, deleteSession, templateColor } from '../core/store.js';
 import { createSession, suggestTemplate } from '../core/training.js';
 import { agoLabel, dateKey } from '../core/date.js';
 import { fmtRange, fmtRest } from '../core/format.js';
@@ -49,10 +49,10 @@ export default function trainView(root) {
     const last = sessions.find((s) => s.templateId === t.id);
     const exNames = t.blocks.flatMap((b) => b.items.map((it) => exerciseName(it.exerciseId)));
     const isSug = suggested?.id === t.id;
-    page.append(h('button', { class: `card tpl-card ${isSug ? 'suggested' : ''}`, onClick: () => preview(t) },
+    page.append(h('button', { class: `card tpl-card ${isSug ? 'suggested' : ''}`, style: { '--tc': templateColor(t) }, onClick: () => preview(t) },
       h('div', { class: 'tpl-top' },
         h('div', { style: { flex: 1, minWidth: 0 } },
-          h('div', { class: 'tpl-name' }, t.name),
+          h('div', { class: 'tpl-name' }, h('span', { class: 'tpl-dot' }), t.name),
           t.subtitle ? h('div', { class: 'tpl-sub' }, t.subtitle) : null),
         isSug ? h('span', { class: 'chip accent' }, 'Suggérée') : null,
         icon('chevron', 20, 'faint')),
@@ -69,6 +69,7 @@ export default function trainView(root) {
   );
 
   function preview(t) {
+    const tc = templateColor(t);
     sheet((close) => [
       t.subtitle ? h('p', { class: 'sheet-text' }, t.subtitle) : null,
       h('div', { class: 'list' },
@@ -84,8 +85,8 @@ export default function trainView(root) {
                     !ss || i === b.items.length - 1 ? ` · repos ${fmtRest(b.rest)}` : ' · enchaîner'].join(''))),
             ));
         })),
-      h('button', { class: 'btn primary block', style: { height: '56px', fontSize: '17px' }, onClick: () => { close(); start(t); } }, icon('play', 20), 'Commencer la séance'),
-    ], { title: t.name });
+      h('button', { class: 'btn block tc-btn', style: { height: '56px', fontSize: '17px', '--tc': tc }, onClick: () => { close(); start(t); } }, icon('play', 20), 'Commencer la séance'),
+    ], { title: t.name, cls: 'tc-sheet', style: { '--tc': tc } });
   }
 
   function start(t) {
@@ -96,9 +97,14 @@ export default function trainView(root) {
     unlockAudio();
     haptic();
     const s = createSession(t, { sessions: doneSessions(), exercises: state.exercises });
+    s.color = templateColor(t);
     saveSession(s);
     navigate('/workout', { replace: true });
   }
 
-  root.append(h('div', { class: 'view' }, pageHeader({ title: 'S’entraîner', onBack: () => back('/') }), page));
+  // Fond : halos aux couleurs des séances
+  const glow = templates.slice(0, 4).map((t, i) => `radial-gradient(60% 26% at ${i % 2 ? 100 : 0}% ${12 + i * 24}%, color-mix(in srgb, ${templateColor(t)} 26%, transparent), transparent 70%)`);
+  root.append(
+    h('div', { class: 'page-bg', 'aria-hidden': 'true', style: { background: [...glow, 'var(--bg)'].join(', ') } }),
+    h('div', { class: 'view' }, pageHeader({ title: 'S’entraîner', onBack: () => back('/') }), page));
 }

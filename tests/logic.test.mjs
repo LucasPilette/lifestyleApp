@@ -250,3 +250,19 @@ test('échauffement : la charge validée ne se propage pas aux séries suivantes
   // pas de progression : charge de travail du groupe (100) pour toutes les séries
   assert.deepEqual(bench.sets.filter((x) => x.tag === 'Lourd').map((x) => x.pw), [100, 100, 100]);
 });
+
+test('première fois : la charge de travail est déduite de l’échauffement', () => {
+  const lowerA = templates.find((t) => t.id === 'lower-a');
+  const s = createSession(lowerA, { sessions: [], exercises, now: 1 });
+  const rdl = s.blocks[0].items[0];
+  Object.assign(rdl.sets[0], { w: 40, r: 8, done: true });
+  propagateWeight(rdl, 0);
+  assert.deepEqual(rdl.sets.filter((x) => x.kind === 'work').map((x) => x.pw), [67.5, 67.5, 67.5]);
+  // avec un historique, les propositions existantes ne sont pas remplacées
+  const hist = [done('lower-a', 0, { rdl: [[100, 7], [100, 7], [100, 6]] })];
+  const s2 = createSession(lowerA, { sessions: hist, exercises, now: 1 });
+  const r2 = s2.blocks[0].items[0];
+  Object.assign(r2.sets[0], { w: 40, r: 8, done: true });
+  propagateWeight(r2, 0);
+  assert.deepEqual(r2.sets.filter((x) => x.kind === 'work').map((x) => x.pw), [100, 100, 100]);
+});

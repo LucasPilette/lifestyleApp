@@ -1,7 +1,7 @@
 // Détail d'une séance terminée, avec modification ou suppression.
 
 import { h, icon, iconButton } from '../core/dom.js';
-import { state, getSession, getExercise, exerciseName, saveSession, deleteSession } from '../core/store.js';
+import { state, getSession, getExercise, exerciseName, saveSession, deleteSession, sessionColor } from '../core/store.js';
 import { sessionStats, setsSummary, pruneSession } from '../core/training.js';
 import { fmtDuration, fmtVolume, fmtNum } from '../core/format.js';
 import { back, navigate } from '../core/router.js';
@@ -117,7 +117,8 @@ export default function logView(root, id) {
   }
 
   renderRead();
-  root.append(h('div', { class: 'view' }, container));
+  const tc = sessionColor(s);
+  root.append(h('div', { class: `view ${tc ? 'tinted' : ''}`, style: tc ? { '--tc': tc } : null }, container));
   return () => {
     if (editing) {
       // Quitter en cours d'édition : on conserve les modifications.

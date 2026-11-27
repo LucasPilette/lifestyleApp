@@ -1,7 +1,7 @@
 // Historique : séances passées et progression par exercice.
 
 import { h, icon } from '../core/dom.js';
-import { state, doneSessions } from '../core/store.js';
+import { state, doneSessions, sessionColor } from '../core/store.js';
 import { sessionStats, exerciseHistory } from '../core/training.js';
 import { fmtDuration, fmtVolume, fmtKg } from '../core/format.js';
 import { back, navigate } from '../core/router.js';
@@ -29,6 +29,7 @@ export default function historyView(root) {
       h('div', { class: 'list' }, list.map((s) => {
         const st = sessionStats(s, state.exercises, bw);
         return h('button', { class: 'row', onClick: () => navigate(`/log/${s.id}`) },
+          h('span', { class: 'tc-dot', style: { '--tc': sessionColor(s) || 'var(--text-3)' } }),
           h('div', { class: 'row-main' },
             h('div', { class: 'row-title' }, s.name),
             h('div', { class: 'row-sub' }, `${relativeDay(dateKey(new Date(s.startedAt)))} · ${formatTime(s.startedAt)} · ${fmtDuration(st.duration)}`)),

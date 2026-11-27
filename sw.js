@@ -2,7 +2,7 @@
 // Le bloc ci-dessous est régénéré par `node tools/release.mjs` à chaque publication.
 
 // <generated>
-const VERSION = '2026.11.27-697544c';
+const VERSION = '2026.11.27-1945a83';
 const ASSETS = [
   "./",
   "./css/app.css",

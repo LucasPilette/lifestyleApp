@@ -1,7 +1,7 @@
 // Séance en cours : chrono, séries, minuteur de repos.
 
 import { h, icon, iconButton } from '../core/dom.js';
-import { state, activeSession, saveSession, deleteSession, exerciseName, getExercise } from '../core/store.js';
+import { state, activeSession, saveSession, deleteSession, exerciseName, getExercise, sessionColor } from '../core/store.js';
 import { nextPending, restAfter, sessionProgress, pruneSession } from '../core/training.js';
 import { fmtClock, fmtKg } from '../core/format.js';
 import { navigate } from '../core/router.js';
@@ -236,8 +236,10 @@ export default function workoutView(root) {
     }
   }
 
-  const view = h('div', { class: 'view' }, header, progress, page);
-  root.append(view, restbar);
+  // Couleur de la séance : fond, cartes, progression
+  const tc = sessionColor(s);
+  const view = h('div', { class: `view ${tc ? 'tinted' : ''}`, style: tc ? { '--tc': tc } : null }, header, progress, page);
+  root.append(tc ? h('div', { class: 'session-bg', 'aria-hidden': 'true', style: { '--tc': tc } }) : '', view, restbar);
   updateProgress();
   tick();
   const timer = setInterval(tick, 250);

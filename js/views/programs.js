@@ -1,7 +1,8 @@
 // Gestion des séances types : liste, création, édition complète.
 
 import { h, icon, iconButton, numInput } from '../core/dom.js';
-import { state, getTemplate, saveTemplate, deleteTemplate, reorderTemplates, exerciseName } from '../core/store.js';
+import { state, getTemplate, saveTemplate, deleteTemplate, reorderTemplates, exerciseName, templateColor } from '../core/store.js';
+import { TEMPLATE_COLORS } from '../data/seed.js';
 import { fmtRest, parseNum } from '../core/format.js';
 import { back, navigate } from '../core/router.js';
 import { actionSheet, confirmSheet, pageHeader, stepper, toggle, toast } from '../core/ui.js';
@@ -21,6 +22,7 @@ export function programsView(root) {
     }
     list.replaceChildren(...ts.map((t, i) =>
       h('div', { class: 'row' },
+        h('span', { class: 'tc-dot', style: { '--tc': templateColor(t) } }),
         h('button', { class: 'row-main', style: { textAlign: 'left' }, onClick: () => navigate(`/programs/${t.id}`) },
           h('div', { class: 'row-title' }, t.name),
           h('div', { class: 'row-sub' }, `${t.blocks.reduce((a, b) => a + b.items.length, 0)} exercices · ≈ ${estimateMinutes(t)} min${t.subtitle ? ` · ${t.subtitle}` : ''}`)),
@@ -69,6 +71,17 @@ export function programEditView(root, id) {
     t.subtitle = subtitle.value.trim();
     save();
   });
+
+  // Couleur de la séance (fond pendant l'entraînement)
+  const swatches = h('div', { class: 'swatches', role: 'radiogroup', 'aria-label': 'Couleur de la séance' });
+  const renderSwatches = () => {
+    const cur = templateColor(t);
+    swatches.replaceChildren(...TEMPLATE_COLORS.map((c) => h('button', {
+      class: `swatch ${c === cur ? 'sel' : ''}`, style: { '--tc': c }, role: 'radio', 'aria-checked': String(c === cur), 'aria-label': `Couleur ${c}`,
+      onClick: () => { t.color = c; save(); renderSwatches(); },
+    }, c === cur ? icon('check', 16) : null)));
+  };
+  renderSwatches();
 
   function render() {
     blocksEl.replaceChildren(...t.blocks.map((b, bi) => blockEditor(b, bi)));
@@ -209,7 +222,7 @@ export function programEditView(root, id) {
   root.append(h('div', { class: 'view' },
     pageHeader({ title: 'Modifier la séance', onBack: () => back('/programs'), actions: [iconButton('more', 'Options', templateMenu)] }),
     h('div', { class: 'page' },
-      h('div', { class: 'form-grid' }, name, subtitle),
+      h('div', { class: 'form-grid' }, name, subtitle, h('div', null, h('div', { class: 'field-label' }, 'Couleur'), swatches)),
       blocksEl,
       h('button', { class: 'btn dashed block', onClick: addExercise }, icon('plus', 18), 'Ajouter un exercice'),
       h('p', { class: 'faint', style: { fontSize: '12.5px', textAlign: 'center' } }, 'Les modifications sont enregistrées automatiquement.'))));

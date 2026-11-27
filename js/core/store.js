@@ -2,7 +2,7 @@
 // Les volumes sont petits (quelques Mo sur des années) : tout est chargé au démarrage.
 
 import * as db from './db.js';
-import { SEED_EXERCISES, SEED_VERSION, seedTemplates } from '../data/seed.js';
+import { SEED_EXERCISES, SEED_VERSION, TEMPLATE_COLORS, seedTemplates } from '../data/seed.js';
 import { clone, mergeDeep, uid } from './util.js';
 import { normalizeWarmups } from './training.js';
 
@@ -149,6 +149,19 @@ export function sortedExercises() {
 
 // --- Séances types -------------------------------------------------------
 export const getTemplate = (id) => state.templates.find((t) => t.id === id);
+
+const DEFAULT_COLORS = { 'upper-a': '#8b93ff', 'lower-a': '#2dd4bf', 'upper-b': '#f472b6', 'lower-b': '#fbbf24' };
+
+/** Couleur d'une séance type (choisie, sinon par défaut selon sa place dans le programme). */
+export function templateColor(t) {
+  if (!t) return null;
+  return t.color || DEFAULT_COLORS[t.id] || TEMPLATE_COLORS[Math.max(0, state.templates.indexOf(t)) % TEMPLATE_COLORS.length];
+}
+
+/** Couleur d'une séance réalisée (copiée au démarrage, sinon celle de son modèle). */
+export function sessionColor(s) {
+  return s?.color || templateColor(getTemplate(s?.templateId)) || null;
+}
 
 export function saveTemplate(t) {
   t.updatedAt = Date.now();

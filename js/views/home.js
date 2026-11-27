@@ -2,7 +2,7 @@
 // Volontairement épuré : les courbes et moyennes sont dans les pages de suivi (icône à droite de chaque rubrique).
 
 import { h, icon, iconButton, numInput } from '../core/dom.js';
-import { state, getDay, setDayField, activeSession, doneSessions } from '../core/store.js';
+import { state, getDay, setDayField, activeSession, doneSessions, sessionColor } from '../core/store.js';
 import { todayKey, addDays, relativeDay, formatLong, weekStart, dateKey, agoLabel, formatWeekday } from '../core/date.js';
 import { METRICS, meetsGoal } from '../core/metrics.js';
 import { navigate } from '../core/router.js';
@@ -32,6 +32,7 @@ export default function home(root, dateParam) {
   const flushAll = () => savers.forEach((d) => d.pending());
   const onHide = () => document.visibilityState === 'hidden' && flushAll();
   document.addEventListener('visibilitychange', onHide);
+  window.addEventListener('pagehide', flushAll);
 
   // --- En-tête avec navigation entre les jours ---
   const goDay = (k) => navigate(k >= today ? '/' : `/day/${k}`, { replace: true });
@@ -155,7 +156,7 @@ export default function home(root, dateParam) {
   // --- Bouton S'entraîner ---
   const active = activeSession();
   const ctaSub = h('span', { class: 'cta-sub' });
-  const cta = h('button', { class: `cta ${active ? 'resume' : ''}`, onClick: () => navigate(active ? '/workout' : '/train') },
+  const cta = h('button', { class: `cta ${active ? 'resume' : ''}`, style: active && sessionColor(active) ? { '--tc': sessionColor(active) } : null, onClick: () => navigate(active ? '/workout' : '/train') },
     icon(active ? 'play' : 'dumbbell', 24),
     active ? [h('span', null, 'Reprendre'), ctaSub] : h('span', null, 'S’entraîner'));
   let timer;
@@ -171,23 +172,27 @@ export default function home(root, dateParam) {
     clearInterval(timer);
     flushAll();
     document.removeEventListener('visibilitychange', onHide);
+    window.removeEventListener('pagehide', flushAll);
   };
 }
 
 function weekCard(date, today, card) {
   const ws = weekStart(date);
   const keys = Array.from({ length: 7 }, (_, i) => addDays(ws, i));
-  const byDay = new Map();
+  const byDay = new Map(); // jour -> nombre de séances
+  const colorOf = new Map(); // jour -> couleur de la séance
   for (const s of doneSessions()) {
     const k = dateKey(new Date(s.startedAt));
-    if (k >= ws && k <= keys[6]) byDay.set(k, (byDay.get(k) || 0) + 1);
+    if (k < ws || k > keys[6]) continue;
+    byDay.set(k, (byDay.get(k) || 0) + 1);
+    if (!colorOf.has(k) && sessionColor(s)) colorOf.set(k, sessionColor(s));
   }
   const count = [...byDay.values()].reduce((a, b) => a + b, 0);
   const target = state.settings.goals.sessionsPerWeek;
   return card('var(--accent)', 'dumbbell', 'Entraînement',
     { meta: h('span', { class: 'hc-meta tnum' }, `${count} / ${target} cette semaine`), chartTo: '/history', chartLabel: 'Historique et progression' },
     h('div', { class: 'week-dots' },
-      keys.map((k) => h('div', { class: `week-dot ${byDay.get(k) ? 'done' : ''} ${k === today ? 'today' : ''}` },
+      keys.map((k) => h('div', { class: `week-dot ${byDay.get(k) ? 'done' : ''} ${k === today ? 'today' : ''}`, style: colorOf.has(k) ? { '--tc': colorOf.get(k) } : null },
         h('span', null, formatWeekday(k).slice(0, 1).toUpperCase()),
         h('i', null, byDay.get(k) ? icon('check', 14) : null)))));
 }

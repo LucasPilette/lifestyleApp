@@ -1,7 +1,7 @@
 // Bilan affiché à la fin d'une séance.
 
 import { h, icon } from '../core/dom.js';
-import { state, getSession, getExercise, exerciseName, saveSession, doneSessions } from '../core/store.js';
+import { state, getSession, getExercise, exerciseName, saveSession, doneSessions, sessionColor } from '../core/store.js';
 import { sessionStats, sessionRecords, setsSummary } from '../core/training.js';
 import { fmtDuration, fmtVolume, fmtKg, fmtNum } from '../core/format.js';
 import { navigate } from '../core/router.js';
@@ -30,7 +30,7 @@ export default function summaryView(root, id) {
 
   const page = h('div', { class: 'page' },
     h('div', { class: 'summary-hero' },
-      h('div', { class: 'summary-badge' }, icon(records.length ? 'trophy' : 'check')),
+      h('div', { class: 'summary-badge', style: sessionColor(s) ? { background: sessionColor(s) } : null }, icon(records.length ? 'trophy' : 'check')),
       h('h1', null, records.length ? 'Nouveaux records !' : 'Séance terminée'),
       h('p', null, `${s.name} · ${formatLong(dateKey(new Date(s.startedAt)))}`)),
     h('div', { class: 'tiles' },

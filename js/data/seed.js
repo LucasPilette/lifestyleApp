@@ -12,6 +12,9 @@ export const MUSCLES = [
 
 export const SEED_VERSION = 2;
 
+/** Couleurs des séances (teintes douces, distinctes du vert citron de l'app). */
+export const TEMPLATE_COLORS = ['#8b93ff', '#2dd4bf', '#f472b6', '#fbbf24', '#4cc2ff', '#fb923c', '#b794f6', '#4ade80'];
+
 const ex = (id, name, muscle, load = 'kg', inc = 2.5, bar = false) => ({ id, name, muscle, load, inc, bar });
 
 export const SEED_EXERCISES = [
@@ -83,6 +86,7 @@ export function seedTemplates() {
     {
       id: 'upper-a',
       name: 'Upper A',
+      color: '#8b93ff',
       subtitle: 'Force au bench et aux tractions',
       order: 0,
       blocks: [
@@ -96,6 +100,7 @@ export function seedTemplates() {
     {
       id: 'lower-a',
       name: 'Lower A',
+      color: '#2dd4bf',
       subtitle: 'Chaîne arrière',
       order: 1,
       blocks: [
@@ -110,6 +115,7 @@ export function seedTemplates() {
     {
       id: 'upper-b',
       name: 'Upper B',
+      color: '#f472b6',
       subtitle: 'Force aux dips, volume au bench',
       order: 2,
       blocks: [
@@ -124,6 +130,7 @@ export function seedTemplates() {
     {
       id: 'lower-b',
       name: 'Lower B',
+      color: '#fbbf24',
       subtitle: 'Quadriceps et fessiers',
       order: 3,
       blocks: [
