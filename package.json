@@ -1,0 +1,12 @@
+{
+  "name": "lifestyle-app",
+  "private": true,
+  "description": "Compagnon quotidien : sommeil, nutrition, pas et musculation (PWA, sans dépendance).",
+  "type": "module",
+  "scripts": {
+    "dev": "node tools/serve.mjs",
+    "test": "node --test tests/logic.test.mjs",
+    "release": "node tools/release.mjs",
+    "icons": "node tools/make-icons.mjs"
+  }
+}
