@@ -10,6 +10,7 @@ import { fmtNum, fmtClock, fmtSleep, parseNum } from '../core/format.js';
 import { debounce } from '../core/util.js';
 import { toast } from '../core/ui.js';
 import { haptic } from '../core/feedback.js';
+import { dayRings } from '../components/ring.js';
 
 export const QUALITY_LABELS = ['', 'Très mauvaise', 'Mauvaise', 'Moyenne', 'Bonne', 'Excellente'];
 
@@ -74,20 +75,33 @@ export default function home(root, dateParam) {
       h('button', { class: 'icon-btn', 'aria-label': 'Jour suivant', disabled: isToday, onClick: () => goDay(addDays(date, 1)) }, icon('chevron', 18))),
     iconButton('sliders', 'Réglages', () => navigate('/settings'), 'glass-btn'));
 
-  // --- Salutation, message et flamme ---
+  // --- Salutation, message et anneau du jour (flamme au centre) ---
   const message = h('p', { class: 'greet-msg' });
-  const flame = h('button', { class: 'flame', 'aria-label': 'Série de jours parfaits', onClick: () => {
+  const legend = h('div', { class: 'ring-legend' });
+  const ringBox = h('button', { class: 'ring-box', onClick: () => {
+    const c = dayChecklist(state.days, date, { goals, sessionDays });
     const n = perfectStreak(state.days, today, { goals, sessionDays });
-    toast(n ? `${n} jour${n > 1 ? 's' : ''} parfait${n > 1 ? 's' : ''} d’affilée 🔥` : 'Jour parfait : tout renseigner + objectif de pas ou une séance', { duration: 3500 });
+    const streakTxt = n ? `🔥 ${n} jour${n > 1 ? 's' : ''} parfait${n > 1 ? 's' : ''} d’affilée. ` : '';
+    const w = c.items.some((i) => i.id === 'weight') ? ' (poids compris)' : '';
+    toast(`${streakTxt}Jour parfait : tout renseigner${w} + objectif de pas ou une séance.`, { duration: 4500 });
   } });
   const hour = new Date().getHours();
   const hello = `${hour >= 18 || hour < 4 ? 'Bonsoir' : 'Bonjour'}${state.settings.name ? ` ${state.settings.name}` : ''}`;
-  const greet = h('section', { class: 'greet' }, h('div', { class: 'greet-top' }, h('h1', null, hello), flame), message);
+  const greet = h('section', { class: 'greet' }, h('div', { class: 'greet-text' }, h('h1', null, hello), message, legend), ringBox);
   refreshers.push(() => {
     const c = dayChecklist(state.days, date, { goals, sessionDays });
     const n = perfectStreak(state.days, today, { goals, sessionDays });
-    flame.replaceChildren(icon('flame', 18), h('span', null, n));
-    flame.classList.toggle('lit', n > 0);
+    const okCount = c.items.filter((i) => i.ok).length;
+    const steps = day().steps || 0;
+    const activity = c.trained ? 1 : goals.steps ? Math.min(1, steps / goals.steps) : 0;
+    ringBox.replaceChildren(
+      dayRings({ data: okCount / c.items.length, activity }),
+      h('span', { class: `ring-center ${n > 0 ? 'lit' : ''}` }, icon('flame', 15), h('b', null, n)));
+    ringBox.classList.toggle('perfect', c.perfect);
+    ringBox.setAttribute('aria-label', `Saisies ${okCount} sur ${c.items.length}, activité ${Math.round(activity * 100)} %, ${n} jours parfaits d’affilée`);
+    legend.replaceChildren(
+      h('span', { class: 'lg-data' }, h('i'), `Saisies ${okCount}/${c.items.length}`),
+      h('span', { class: 'lg-act' }, h('i'), c.trained ? 'Séance faite' : `Activité ${Math.round(activity * 100)} %`));
     message.textContent = greetingMessage(c, isToday);
   });
 

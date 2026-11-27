@@ -47,7 +47,7 @@ export function programsView(root) {
   root.append(h('div', { class: 'view' },
     pageHeader({ title: 'Mes séances', onBack: () => back('/train') }),
     h('div', { class: 'page' },
-      h('p', { class: 'muted', style: { fontSize: '13.5px', margin: '0 4px' } }, 'L’ordre détermine la séance suggérée : après Upper A vient la suivante de la liste.'),
+      h('p', { class: 'muted', style: { fontSize: '13.5px', margin: '0 4px' } }, 'L’ordre détermine la séance suggérée : après Zeus vient la suivante de la liste.'),
       list,
       h('button', { class: 'btn primary block', onClick: create }, icon('plus', 18), 'Nouvelle séance'))));
 }

@@ -50,6 +50,7 @@ export default function trainView(root) {
     const exNames = t.blocks.flatMap((b) => b.items.map((it) => exerciseName(it.exerciseId)));
     const isSug = suggested?.id === t.id;
     page.append(h('button', { class: `card tpl-card ${isSug ? 'suggested' : ''}`, style: { '--tc': templateColor(t) }, onClick: () => preview(t) },
+      h('span', { class: 'tpl-mark', 'aria-hidden': 'true' }, (t.name || '?').charAt(0).toUpperCase()),
       h('div', { class: 'tpl-top' },
         h('div', { style: { flex: 1, minWidth: 0 } },
           h('div', { class: 'tpl-name' }, h('span', { class: 'tpl-dot' }), t.name),

@@ -10,7 +10,10 @@ export const MUSCLES = [
   'Quadriceps', 'Ischios', 'Fessiers', 'Mollets', 'Abdos', 'Autre',
 ];
 
-export const SEED_VERSION = 2;
+export const SEED_VERSION = 3;
+
+/** Noms des séances (v3) : id -> [ancien nom, nouveau nom]. */
+export const TEMPLATE_RENAMES = { 'upper-a': ['Upper A', 'Zeus'], 'lower-a': ['Lower A', 'Gojo'], 'upper-b': ['Upper B', 'Toji'], 'lower-b': ['Lower B', 'Atlas'] };
 
 /** Couleurs des séances (teintes douces, distinctes du vert citron de l'app). */
 export const TEMPLATE_COLORS = ['#8b93ff', '#2dd4bf', '#f472b6', '#fbbf24', '#4cc2ff', '#fb923c', '#b794f6', '#4ade80'];
@@ -85,9 +88,9 @@ export function seedTemplates() {
   return [
     {
       id: 'upper-a',
-      name: 'Upper A',
+      name: 'Zeus',
       color: '#8b93ff',
-      subtitle: 'Force au bench et aux tractions',
+      subtitle: 'Haut du corps · force au bench et aux tractions',
       order: 0,
       blocks: [
         block(210, item('bench', [[3, 3, 5, 'Lourd'], [2, 8, 8, 'Léger']], { warmup: true, note: 'Repos 3-4 min' })),
@@ -99,9 +102,9 @@ export function seedTemplates() {
     },
     {
       id: 'lower-a',
-      name: 'Lower A',
+      name: 'Gojo',
       color: '#2dd4bf',
-      subtitle: 'Chaîne arrière',
+      subtitle: 'Bas du corps · chaîne arrière',
       order: 1,
       blocks: [
         block(180, item('rdl', [[3, 6, 8]], { warmup: true, note: "Garder 2-3 reps en réserve, sans aller à l'échec" })),
@@ -114,9 +117,9 @@ export function seedTemplates() {
     },
     {
       id: 'upper-b',
-      name: 'Upper B',
+      name: 'Toji',
       color: '#f472b6',
-      subtitle: 'Force aux dips, volume au bench',
+      subtitle: 'Haut du corps · force aux dips, volume au bench',
       order: 2,
       blocks: [
         block(180, item('dips_weighted', [[3, 4, 6, 'Lourd'], [1, 10, 12, 'Léger']], { warmup: true })),
@@ -129,9 +132,9 @@ export function seedTemplates() {
     },
     {
       id: 'lower-b',
-      name: 'Lower B',
+      name: 'Atlas',
       color: '#fbbf24',
-      subtitle: 'Quadriceps et fessiers',
+      subtitle: 'Bas du corps · quadriceps et fessiers',
       order: 3,
       blocks: [
         block(150, item('leg_press', [[3, 10, 15]], { alt: ['hack_squat'], warmup: true })),

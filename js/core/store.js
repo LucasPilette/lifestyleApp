@@ -2,7 +2,7 @@
 // Les volumes sont petits (quelques Mo sur des années) : tout est chargé au démarrage.
 
 import * as db from './db.js';
-import { SEED_EXERCISES, SEED_VERSION, TEMPLATE_COLORS, seedTemplates } from '../data/seed.js';
+import { SEED_EXERCISES, SEED_VERSION, TEMPLATE_COLORS, TEMPLATE_RENAMES, seedTemplates } from '../data/seed.js';
 import { clone, mergeDeep, uid } from './util.js';
 import { normalizeWarmups } from './training.js';
 
@@ -81,6 +81,23 @@ async function applySeed() {
   if (v >= 1 && v < 2 && state.templates.length) {
     state.templates.forEach(normalizeWarmups);
     await db.putMany('templates', state.templates);
+  }
+  // v3 : séances renommées (Zeus, Gojo, Toji, Atlas) si elles portent encore le nom d'origine.
+  if (v >= 1 && v < 3) {
+    const OLD_SUBTITLES = { 'upper-a': 'Force au bench et aux tractions', 'lower-a': 'Chaîne arrière', 'upper-b': 'Force aux dips, volume au bench', 'lower-b': 'Quadriceps et fessiers' };
+    const fresh = new Map(seedTemplates().map((t) => [t.id, t]));
+    const changedT = [];
+    for (const t of state.templates) {
+      const r = TEMPLATE_RENAMES[t.id];
+      if (!r || t.name !== r[0]) continue;
+      t.name = r[1];
+      if (t.subtitle === OLD_SUBTITLES[t.id]) t.subtitle = fresh.get(t.id).subtitle;
+      changedT.push(t);
+    }
+    if (changedT.length) await db.putMany('templates', changedT);
+    const changedS = state.sessions.filter((s) => TEMPLATE_RENAMES[s.templateId]?.[0] === s.name);
+    changedS.forEach((s) => { s.name = TEMPLATE_RENAMES[s.templateId][1]; });
+    if (changedS.length) await db.putMany('sessions', changedS);
   }
   state.meta = { ...state.meta, seedVersion: SEED_VERSION, createdAt: state.meta.createdAt || Date.now() };
   await db.kvSet('meta', state.meta);

@@ -648,3 +648,147 @@ select.text-input { appearance: none; -webkit-appearance: none; }
 .mood:active { transform: scale(0.92); }
 .mood.sel { filter: none; opacity: 1; background: color-mix(in srgb, var(--c-mood) 28%, rgba(0, 0, 0, 0.2)); border-color: color-mix(in srgb, var(--c-mood) 60%, transparent); transform: scale(1.04); }
 .mood-note { margin-top: 10px; font-size: 15px; padding: 10px 12px; background: rgba(0, 0, 0, 0.28); border-color: rgba(255, 255, 255, 0.09); resize: none; }
+
+/* ==========================================================================
+   DA v4 « Eclipse » : moins sombre, plus de matière
+   - fond noir bleuté + halos colorés animés sur tous les écrans
+   - verre lumineux (reflet spéculaire, bord clair), pastilles d'icônes pleines
+   - chiffres en SF Pro Rounded (comme Apple Fitness)
+   ========================================================================== */
+:root {
+  --bg: #0f1119;
+  --surface: #191c27;
+  --surface-2: #222634;
+  --surface-3: #2c3142;
+  --line: #313649;
+  --line-soft: #252a39;
+  --text-2: #aab2c3;
+  --text-3: #737b8f;
+  --font-round: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --glass-hi: rgba(255, 255, 255, 0.16);
+}
+
+/* Fond global animé (chaque écran peut le recouvrir par le sien) */
+body::before {
+  content: ""; position: fixed; inset: -20%; z-index: -2; pointer-events: none;
+  background:
+    radial-gradient(35% 30% at 20% 15%, rgba(120, 100, 255, 0.28), transparent 70%),
+    radial-gradient(30% 28% at 85% 30%, rgba(255, 70, 90, 0.16), transparent 70%),
+    radial-gradient(35% 30% at 25% 80%, rgba(20, 190, 150, 0.16), transparent 70%),
+    radial-gradient(30% 30% at 85% 85%, rgba(198, 244, 50, 0.1), transparent 70%),
+    linear-gradient(180deg, #141728 0%, var(--bg) 55%);
+  animation: aurora 26s ease-in-out infinite alternate;
+}
+@keyframes aurora {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(3%, -2%, 0) scale(1.05); }
+  100% { transform: translate3d(-3%, 2%, 0) scale(1.02); }
+}
+.home-bg, .page-bg, .session-bg { animation: aurora 30s ease-in-out infinite alternate; inset: -10%; }
+.home-bg {
+  background:
+    radial-gradient(50% 30% at 0% 10%, rgba(152, 135, 239, 0.5), transparent 70%),
+    radial-gradient(45% 28% at 100% 30%, rgba(236, 111, 174, 0.32), transparent 70%),
+    radial-gradient(45% 26% at 100% 55%, rgba(233, 116, 46, 0.34), transparent 70%),
+    radial-gradient(50% 28% at 0% 72%, rgba(20, 168, 106, 0.34), transparent 70%),
+    radial-gradient(55% 28% at 100% 96%, rgba(198, 244, 50, 0.22), transparent 70%),
+    linear-gradient(180deg, #161a2c 0%, var(--bg) 60%);
+}
+
+/* Cartes et listes : verre clair plutôt qu'aplat sombre */
+.card, .list, .tile, .stat {
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.025));
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: inset 0 1px 0 var(--glass-hi), 0 8px 28px rgba(0, 0, 0, 0.22);
+}
+.stat { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08); }
+.list .row + .row { border-top-color: rgba(255, 255, 255, 0.06); }
+.glass {
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04));
+  border-color: rgba(255, 255, 255, 0.13);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), inset 0 -1px 0 rgba(255, 255, 255, 0.03), 0 12px 34px rgba(0, 0, 0, 0.28);
+}
+.topbar { background: rgba(15, 17, 25, 0.6); }
+.segmented { background: rgba(255, 255, 255, 0.06); border-color: rgba(255, 255, 255, 0.08); }
+.seg.active { background: rgba(255, 255, 255, 0.14); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15); }
+.sheet { background: linear-gradient(180deg, #232738, #1a1d29 160px); border-top-color: rgba(255, 255, 255, 0.14); }
+.btn { background: rgba(255, 255, 255, 0.07); border-color: rgba(255, 255, 255, 0.1); }
+.btn.primary { background: var(--accent); border-color: var(--accent); }
+.btn.danger { background: var(--danger-soft); border-color: transparent; }
+.btn.dashed { background: transparent; border-color: rgba(255, 255, 255, 0.18); }
+.tc-btn { background: var(--tc); border-color: var(--tc); }
+.num-input { background: rgba(0, 0, 0, 0.22); border-color: rgba(255, 255, 255, 0.1); }
+
+/* Pendant la séance, les cartes restent opaques (lisibilité + glisser pour supprimer) */
+.view.tinted .ex-card { -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08); }
+
+/* Chiffres arrondis */
+.greet h1, .hero-value, .tile-value, .stat-value, .rb-sum, .num-input, .rest-time, .cta, .tpl-name,
+.ring-center b, .stepper-value, .chart-tip-value, .summary-hero h1, .day-label, .tpl-mark {
+  font-family: var(--font-round);
+}
+
+/* --- Accueil : anneau du jour ------------------------------------------- */
+.greet { display: flex; align-items: center; gap: 14px; padding: 4px 2px 4px 4px; }
+.greet-text { flex: 1; min-width: 0; }
+.greet h1 {
+  font-size: 30px; font-weight: 800; letter-spacing: -0.025em; line-height: 1.1;
+  background: linear-gradient(90deg, #fff 30%, #d9d4ff); -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.greet-msg { min-height: 0; margin-top: 5px; font-size: 14px; }
+.ring-legend { display: flex; gap: 12px; margin-top: 8px; font-size: 12px; color: var(--text-2); font-weight: 600; flex-wrap: wrap; }
+.ring-legend span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.ring-legend i { width: 8px; height: 8px; border-radius: 50%; }
+.lg-data i { background: linear-gradient(135deg, #ff3b4a, #ff9f43); }
+.lg-act i { background: linear-gradient(135deg, #2ee59d, #c6f432); }
+.ring-box { position: relative; flex: none; width: 104px; height: 104px; border-radius: 50%; display: grid; place-items: center; transition: transform 0.15s; }
+.ring-box:active { transform: scale(0.96); }
+.ring-box::before { content: ""; position: absolute; inset: 6px; border-radius: 50%; background: radial-gradient(circle, rgba(255, 80, 60, 0.18), transparent 70%); filter: blur(6px); }
+.ring-box.perfect::before { background: radial-gradient(circle, rgba(255, 140, 60, 0.45), transparent 70%); }
+.day-rings { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.ring-arc { transition: stroke-dashoffset 0.8s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.ring-center { position: relative; display: flex; flex-direction: column; align-items: center; line-height: 1; color: var(--text-3); }
+.ring-center b { font-size: 17px; font-weight: 800; margin-top: 1px; }
+.ring-center.lit { color: #ffb04a; }
+.ring-center.lit b { color: #fff; }
+
+/* --- Accueil : rubriques ------------------------------------------------- */
+.rubric .card-icon {
+  width: 34px; height: 34px; border-radius: 11px; color: #fff;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--c) 85%, #fff), color-mix(in srgb, var(--c) 80%, #000));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 4px 14px color-mix(in srgb, var(--c) 40%, transparent);
+}
+.rubric .card-icon .icon { width: 18px; height: 18px; }
+.rb-head h2 { color: var(--text); font-size: 16.5px; }
+.rb-sum { color: color-mix(in srgb, var(--c) 45%, #fff); font-weight: 650; font-size: 15px; }
+.rubric.open { background: linear-gradient(160deg, color-mix(in srgb, var(--c) 14%, rgba(255, 255, 255, 0.1)), rgba(255, 255, 255, 0.04)); }
+
+/* Bouton principal : dégradé + reflet */
+.cta {
+  background: linear-gradient(135deg, #d8ff4a, #9fe02a);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), 0 10px 34px rgba(170, 230, 40, 0.3);
+  font-size: 19px;
+}
+.cta.resume { background: linear-gradient(135deg, color-mix(in srgb, var(--tc, #fff) 75%, #fff), var(--tc, #ddd)); color: #0b0d10; }
+
+/* --- Choix de séance : nom en grand, initiale en filigrane --------------- */
+.tpl-card { overflow: hidden; padding: 18px 18px 16px; }
+.tpl-mark {
+  position: absolute; right: 2px; bottom: -30px; font-size: 136px; font-weight: 900; line-height: 1; pointer-events: none;
+  color: var(--tc); opacity: 0.13; letter-spacing: -0.05em;
+}
+.tpl-top, .tpl-ex, .tpl-meta { position: relative; }
+.tpl-name { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; }
+.tpl-sub { font-size: 13.5px; color: color-mix(in srgb, var(--tc) 40%, #fff); font-weight: 600; margin-top: 2px; }
+.tpl-meta { flex-wrap: wrap; gap: 6px; }
+.tpl-meta span { background: rgba(0, 0, 0, 0.22); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 999px; padding: 3px 9px; }
+
+@media (prefers-reduced-motion: reduce) {
+  body::before, .home-bg, .page-bg, .session-bg { animation: none; }
+}
+
+/* Rangée d alternatives : défilement horizontal sans barre visible */
+.alt-row { scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.alt-row::-webkit-scrollbar { display: none; }
