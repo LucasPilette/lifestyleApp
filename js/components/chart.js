@@ -196,26 +196,3 @@ export function mountChart(host, opts) {
   ro.observe(host);
   return { update: render, destroy: () => ro.disconnect() };
 }
-
-/** Mini-histogramme pour les cartes de l'accueil (valeurs des derniers jours). */
-export function sparkBars(values, { color, goal, height = 34, width = 112, highlightLast = true } = {}) {
-  const n = values.length;
-  const max = Math.max(goal || 0, ...values.filter((v) => v != null), 1);
-  const gap = 2;
-  const bw = (width - gap * (n - 1)) / n;
-  const svg = s('svg', { class: 'spark', viewBox: `0 0 ${width} ${height}`, width, height, 'aria-hidden': 'true', preserveAspectRatio: 'none' });
-  values.forEach((v, i) => {
-    const x = i * (bw + gap);
-    if (v == null) {
-      svg.append(s('rect', { x, y: height - 2, width: bw, height: 2, rx: 1, class: 'spark-empty' }));
-      return;
-    }
-    const hh = Math.max(2, (v / max) * (height - 2));
-    svg.append(s('rect', { x, y: height - hh, width: bw, height: hh, rx: Math.min(2, bw / 2), fill: color, opacity: highlightLast && i === n - 1 ? 1 : 0.55 }));
-  });
-  if (goal) {
-    const gy = height - (goal / max) * (height - 2);
-    svg.append(s('line', { x1: 0, x2: width, y1: gy, y2: gy, class: 'spark-goal' }));
-  }
-  return svg;
-}
