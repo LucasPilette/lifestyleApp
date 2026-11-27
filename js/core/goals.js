@@ -124,7 +124,9 @@ export function evaluateGoal(id, cfg, ctx) {
   const dir = cfg.dir || 'min';
   const met = isMet(cur.value, cfg.target, dir);
   const status = met ? 'met' : cfg.achievedAt ? 'lost' : 'progress';
-  return { id, def, cfg, ...cur, dir, met, status, progress: progressOf(cur.value, cfg.target, cfg.start, dir) };
+  // Poids : progression depuis la valeur de départ ; autres : valeur rapportée à la cible (ex. 147/150 = 98 %).
+  const progress = progressOf(cur.value, cfg.target, id === 'weight' ? cfg.start : null, dir);
+  return { id, def, cfg, ...cur, dir, met, status, progress };
 }
 
 /** Direction suggérée quand on fixe une cible (poids : prise ou perte selon la valeur actuelle). */

@@ -35,3 +35,16 @@ export function dayRings({ data, activity }) {
     arc(28.5, 11, activity, `url(#rg-i-${id})`));
   return svg;
 }
+
+/** Anneau simple de progression d'un objectif (couleur CSS, doré si atteint). */
+export function goalRing(ratio, { met = false } = {}) {
+  const r = 40;
+  const c = 2 * Math.PI * r;
+  const p = Math.max(0, Math.min(1, ratio || 0));
+  return s('svg', { class: `goal-ring ${met ? 'met' : ''}`, viewBox: '0 0 100 100', 'aria-hidden': 'true' },
+    s('circle', { class: 'gr-track', cx: 50, cy: 50, r, fill: 'none', 'stroke-width': 9 }),
+    s('circle', {
+      class: 'gr-arc', cx: 50, cy: 50, r, fill: 'none', 'stroke-width': 9, 'stroke-linecap': 'round',
+      'stroke-dasharray': `${c} ${c}`, 'stroke-dashoffset': c * (1 - p), transform: 'rotate(-90 50 50)', opacity: p > 0 ? 1 : 0,
+    }));
+}

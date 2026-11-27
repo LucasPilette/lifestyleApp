@@ -3,14 +3,16 @@
 
 import { h, icon, iconButton, numInput } from '../core/dom.js';
 import { state, getDay, setDayField, activeSession, doneSessions, sessionColor, updateSettings } from '../core/store.js';
-import { todayKey, addDays, formatLong, weekStart, dateKey, agoLabel, formatWeekday } from '../core/date.js';
+import { todayKey, addDays, formatLong, formatShort, weekStart, dateKey, agoLabel, formatWeekday } from '../core/date.js';
 import { METRICS, MOODS, meetsGoal, dayChecklist, perfectStreak, weekTraining, weightRequired, lastValueBefore } from '../core/metrics.js';
 import { navigate } from '../core/router.js';
 import { fmtNum, fmtClock, fmtSleep, parseNum } from '../core/format.js';
 import { debounce } from '../core/util.js';
-import { toast } from '../core/ui.js';
+import { toast, sheet } from '../core/ui.js';
 import { haptic } from '../core/feedback.js';
-import { dayRings } from '../components/ring.js';
+import { dayRings, goalRing } from '../components/ring.js';
+import { evaluateAll } from './goals.js';
+import { editGoal } from '../components/goal-editor.js';
 
 export const QUALITY_LABELS = ['', 'Très mauvaise', 'Mauvaise', 'Moyenne', 'Bonne', 'Excellente'];
 
@@ -318,6 +320,57 @@ export default function home(root, dateParam) {
   // --- Entraînement de la semaine ---
   page.append(trainingRubric(rubric, date, today, sessionDays));
 
+  // --- Objectifs : 4 widgets (anneau + valeur), détail au toucher ---
+  const widgets = h('section', { class: 'goal-widgets', 'aria-label': 'Objectifs' });
+  const renderWidgets = () => {
+    const { results } = evaluateAll();
+    widgets.replaceChildren(...results.map((r) => {
+      const unset = r.status === 'unset';
+      const met = r.status === 'met';
+      return h('button', {
+        class: `gw glass ${met ? 'met' : ''} ${r.status === 'lost' ? 'lost' : ''} ${unset ? 'unset' : ''}`,
+        style: { '--c': r.def.color },
+        'aria-label': `${r.def.label} : ${r.value != null ? fullFmt(r) : 'pas de donnée'}${unset ? ', objectif à définir' : `, ${Math.round(r.progress * 100)} %`}`,
+        onClick: () => goalDetail(r),
+      },
+        h('div', { class: 'gw-ring' },
+          goalRing(unset ? 0 : r.progress, { met }),
+          h('span', { class: 'gw-value' }, unset && r.value == null ? icon('plus', 18) : compactFmt(r)),
+          met ? h('span', { class: 'gw-trophy' }, icon('trophy', 11)) : null),
+        h('span', { class: 'gw-label' }, WIDGET_LABELS[r.id]));
+    }));
+  };
+  refreshers.push(renderWidgets);
+  page.append(widgets);
+
+  function goalDetail(r) {
+    const fmt = fullFmt;
+    sheet((close) => {
+      const statusTxt = r.status === 'unset' ? 'Aucun objectif défini.'
+        : r.status === 'met' ? `Atteint${r.cfg.achievedAt ? ` le ${formatShort(r.cfg.achievedAt)}` : ''} : à maintenir ou dépasser.`
+        : r.status === 'lost' ? `Atteint le ${formatShort(r.cfg.achievedAt)}, à reconquérir.`
+        : `${Math.round(r.progress * 100)} % du chemin.`;
+      const target = r.cfg?.target != null ? (r.id === 'sleep' ? fmtSleep(r.cfg.target) : r.def.fmt(r.cfg.target)) : null;
+      return [
+        h('div', { class: `gw-detail ${r.status === 'met' ? 'met' : ''}`, style: { '--c': r.def.color } },
+          h('div', { class: 'gw-ring big' }, goalRing(r.status === 'unset' ? 0 : r.progress, { met: r.status === 'met' }),
+            h('span', { class: 'gw-value' }, `${Math.round((r.status === 'unset' ? 0 : r.progress) * 100)} %`)),
+          h('div', null,
+            h('div', { class: 'gw-d-current' }, r.value != null ? fmt(r) : '–'),
+            h('div', { class: 'gw-d-sub' }, r.sub),
+            target ? h('div', { class: 'gw-d-target' }, `Objectif : ${r.dir === 'max' ? 'au plus ' : ''}${target}`) : null)),
+        r.id === 'bench' && r.est ? h('p', { class: 'sheet-text' }, `1RM estimé d’après tes meilleures séries : ${r.def.fmt(r.est)}.`) : null,
+        h('p', { class: 'sheet-text' }, statusTxt),
+        h('div', { class: 'sheet-actions' },
+          h('button', { class: 'btn ghost', onClick: () => { close(); navigate('/goals'); } }, 'Tous les objectifs'),
+          h('button', { class: 'btn primary', onClick: async () => {
+            close();
+            if (await editGoal(r.id, { current: r.value })) refresh();
+          } }, r.status === 'unset' ? 'Définir' : 'Ajuster')),
+      ];
+    }, { title: r.def.label });
+  }
+
   // --- Bouton S'entraîner ---
   const active = activeSession();
   const ctaSub = h('span', { class: 'cta-sub' });
@@ -340,6 +393,23 @@ export default function home(root, dateParam) {
     document.removeEventListener('visibilitychange', onHide);
     window.removeEventListener('pagehide', flushAll);
   };
+}
+
+const WIDGET_LABELS = { weight: 'Poids', sleep: 'Sommeil', bench: 'Bench', kcal: 'Calories' };
+
+/** Valeur complète d'un objectif (avec unité). */
+function fullFmt(r) {
+  return r.id === 'sleep' ? fmtSleep(r.value) : r.def.fmt(r.value);
+}
+
+/** Valeur compacte pour le centre d'un widget. */
+function compactFmt(r) {
+  const v = r.value;
+  if (v == null) return '–';
+  if (r.id === 'sleep') return `${Math.floor(v / 60)}h${String(Math.round(v % 60)).padStart(2, '0')}`;
+  if (r.id === 'kcal') return v >= 1000 ? `${fmtNum(v / 1000, 1)}k` : fmtNum(Math.round(v));
+  if (r.id === 'bench') return fmtNum(Math.round(v * 2) / 2, 1);
+  return fmtNum(v, 1);
 }
 
 function trainingRubric(rubric, date, today, sessionDays) {
