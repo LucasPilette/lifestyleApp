@@ -378,3 +378,24 @@ test('objectifs : 1RM bench d’une séance', async () => {
   assert.ok(Math.abs(g.sessionBenchE1rm(s) - 151.67) < 0.01); // 130 × (1 + 5/30)
   assert.equal(g.sessionBenchLift(s), 140); // barre réellement passée
 });
+
+test('objectifs : moyennes, 1RM réel sur un exercice, séances par semaine', async () => {
+  const g = await import('../js/core/goals.js');
+  const today = '2026-11-27';
+  const days = new Map([['2026-11-25', { prot: 140, steps: 9000 }], ['2026-11-26', { prot: 160, steps: 11000 }]]);
+  const sessions = [
+    done('lower-a', new Date(2026, 10, 25, 18).getTime(), { squat: [[120, 5], [130, 2]] }),
+    done('upper-b', new Date(2026, 10, 10, 18).getTime(), { dips_weighted: [[30, 5]] }),
+    done('upper-a', new Date(2026, 9, 1, 18).getTime(), {}), // hors des 4 semaines
+  ];
+  const ctx = { days, sessions, exercises, today };
+  assert.equal(g.currentValue('avg:prot', {}, ctx).value, 150);
+  assert.equal(g.currentValue('avg:steps', {}, ctx).value, 10000);
+  assert.equal(g.currentValue('lift:squat', {}, ctx).value, 130); // barre la plus lourde passée
+  assert.equal(g.goalDef('lift:squat', exercises).label, 'Squat');
+  assert.equal(g.goalDef('lift:dips_weighted', exercises).lest, true);
+  assert.equal(g.currentValue('lift:dips_weighted', {}, ctx).value, 30);
+  assert.equal(g.currentValue('sessions', {}, ctx).value, 0.5); // 2 séances / 4 semaines
+  assert.equal(g.evaluateGoal('lift:squat', { target: 130, dir: 'min' }, ctx).status, 'met');
+  assert.equal(g.goalDef('sleep').label, 'Sommeil moyen'); // clé historique
+});

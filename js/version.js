@@ -1,2 +1,2 @@
 // Généré par tools/release.mjs — ne pas modifier à la main.
-export const VERSION = '2026.11.27-e1a1743';
+export const VERSION = '2026.11.27-d4e8ffc';

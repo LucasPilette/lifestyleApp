@@ -8,8 +8,8 @@ import { confirmSheet, pageHeader, stepper, toggle, toast } from '../core/ui.js'
 import { agoLabel, dateKey, todayKey } from '../core/date.js';
 import { isStandalone } from './home.js';
 import { VERSION } from '../version.js';
-import { GOAL_ORDER, GOAL_DEFS, evaluateGoal } from '../core/goals.js';
-import { editGoal } from '../components/goal-editor.js';
+import { evaluateGoal } from '../core/goals.js';
+import { editGoal, goalList } from '../components/goal-editor.js';
 import { doneSessions } from '../core/store.js';
 
 export default function settingsView(root) {
@@ -99,12 +99,12 @@ export default function settingsView(root) {
   const goalsList = h('div', { class: 'list' });
   const renderGoals = () => {
     const ctx = { days: state.days, sessions: doneSessions(), exercises: state.exercises, today: todayKey() };
-    goalsList.replaceChildren(...GOAL_ORDER.map((id) => {
+    goalsList.replaceChildren(...goalList().map((id) => {
       const r = evaluateGoal(id, state.settings.objectives?.[id], ctx);
-      const fmt = id === 'sleep' ? fmtSleep : GOAL_DEFS[id].fmt;
+      const fmt = r.def.fmt;
       const value = r.status === 'unset' ? 'À définir' : `${r.dir === 'max' ? '≤ ' : ''}${fmt(r.cfg.target)}`;
       return h('button', { class: 'row', onClick: async () => { if (await editGoal(id, { current: r.value })) renderGoals(); } },
-        h('div', { class: 'row-main' }, h('div', { class: 'row-title' }, GOAL_DEFS[id].label),
+        h('div', { class: 'row-main' }, h('div', { class: 'row-title' }, r.def.label),
           h('div', { class: 'row-sub' }, r.value != null ? `Actuel : ${fmt(r.value)}${r.status === 'met' ? ' · atteint ✓' : ''}` : r.sub)),
         h('span', { class: 'row-end' }, value), icon('chevron', 18, 'chev'));
     }));
@@ -116,6 +116,7 @@ export default function settingsView(root) {
     h('div', { class: 'list' }, row('Prénom', 'Pour le message d’accueil', nameInput)),
     h('div', { class: 'section-title' }, 'Mes objectifs'),
     goalsList,
+    h('button', { class: 'btn ghost block', onClick: () => navigate('/goals') }, icon('trophy', 18), 'Ouvrir l’onglet Objectifs (ajouter, détails)'),
     h('div', { class: 'section-title' }, 'Objectifs quotidiens'),
     h('div', { class: 'list' },
       row('Sommeil', null, stepper({ value: g.sleepMin || 480, step: 15, min: 240, max: 720, format: fmtSleep, onChange: (v) => updateSettings({ goals: { sleepMin: v } }) })),

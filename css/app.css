@@ -1020,3 +1020,40 @@ input[type="date"].text-input { color-scheme: dark; min-height: 48px; }
 .gw-ring { width: 52px; height: 52px; }
 .gw { padding: 9px 4px 8px; gap: 5px; }
 .gw-value { font-size: 13.5px; }
+
+/* ==========================================================================
+   Onglet Objectifs : widgets 2 par ligne
+   ========================================================================== */
+.goal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.gw2 {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 16px 10px 14px; border-radius: 22px; min-width: 0; text-align: center; transition: transform 0.12s;
+}
+.gw2:active { transform: scale(0.97); }
+.gw2 .gw-ring { width: 104px; height: 104px; margin-bottom: 6px; }
+.gw2 .gw-value { font-size: 22px; }
+.gw-pct { position: absolute; bottom: 24px; left: 0; right: 0; text-align: center; font-size: 11px; font-weight: 700; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.gw2 .gw-value { transform: translateY(-4px); }
+.gw2 .gw-label { font-size: 14.5px; font-weight: 700; color: var(--text); white-space: normal; line-height: 1.2; }
+.gw-status { font-size: 12px; font-weight: 600; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.gw2 .gw-trophy { top: 10px; right: 10px; width: 24px; height: 24px; }
+.gw2 .gw-trophy .icon { width: 13px; height: 13px; }
+.gw2.met { border-color: rgba(255, 204, 77, 0.55); background: linear-gradient(160deg, rgba(255, 204, 77, 0.18), rgba(255, 255, 255, 0.04)); }
+.gw2.met .gw-status { color: #ffd257; }
+.gw2.met .gw-pct { color: #ffd257; }
+.gw2.lost .gw-status { color: #ffa24a; }
+.gw2.unset { border-style: dashed; }
+.gw2.unset .gw-value { color: var(--c); }
+.gw2.unset .gw-status { color: var(--c); }
+.gw2.add {
+  background: transparent; border: 1.5px dashed rgba(255, 255, 255, 0.2); box-shadow: none;
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+}
+.gw2.add .gw-ring { display: grid; place-items: center; }
+.gw-plus {
+  width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; color: #fff;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 8px 24px rgba(255, 70, 60, 0.35);
+}
+.gw2.add .gw-label { color: var(--text-2); }
+.goal-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); flex: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 22%, transparent); }
