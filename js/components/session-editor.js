@@ -3,13 +3,13 @@
 // mode 'edit' : correction d'une séance terminée
 
 import { h, icon, iconButton, numInput } from '../core/dom.js';
-import { state, getExercise, exerciseName, doneSessions } from '../core/store.js';
-import { buildItem, makeSet, nextPending, propagateWeight, DEFAULT_PLAN, DEFAULT_REST } from '../core/training.js';
+import { state, getExercise, exerciseName, doneSessions, getTemplate, saveTemplate } from '../core/store.js';
+import { buildItem, makeSet, nextPending, propagateWeight, exerciseRecords, setRecordType, loadOf, DEFAULT_PLAN, DEFAULT_REST } from '../core/training.js';
 import { fmtKg, fmtRange, fmtRest, parseNum } from '../core/format.js';
 import { formatShort, dateKey } from '../core/date.js';
-import { actionSheet, confirmSheet, promptSheet, toast } from '../core/ui.js';
+import { actionSheet, confirmSheet, promptSheet, toast, sheet, stepper, toggle } from '../core/ui.js';
 import { navigate } from '../core/router.js';
-import { haptic } from '../core/feedback.js';
+import { haptic, successSound } from '../core/feedback.js';
 import { pickExercise } from './exercise-picker.js';
 
 const kgStr = (w) => (w == null ? '' : String(w).replace('.', ','));
@@ -17,6 +17,16 @@ const kgStr = (w) => (w == null ? '' : String(w).replace('.', ','));
 export function createSessionEditor({ session, mode = 'live', onChange, onSetDone }) {
   const live = mode === 'live';
   const el = h('div', { class: 'wo-list', style: { display: 'flex', flexDirection: 'column', gap: '12px' } });
+
+  // Records de chaque exercice avant cette séance (pour la couronne)
+  const recCache = new Map();
+  const recordsOf = (exerciseId) => {
+    if (!recCache.has(exerciseId)) {
+      recCache.set(exerciseId, exerciseRecords(exerciseId, doneSessions(), getExercise(exerciseId), state.settings.bodyweight, session.startedAt, session.id));
+    }
+    return recCache.get(exerciseId);
+  };
+  const recordOf = (it, set) => setRecordType(set, getExercise(it.exerciseId), recordsOf(it.exerciseId), state.settings.bodyweight);
 
   function render() {
     const next = live ? nextPending(session) : null;
@@ -31,7 +41,7 @@ export function createSessionEditor({ session, mode = 'live', onChange, onSetDon
     const complete = block.items.every((it) => it.sets.length && it.sets.every((s) => s.done));
     const current = next?.bi === bi;
     return h('section', { class: `card ex-card ${current ? 'current' : ''} ${complete ? 'complete' : ''}`, 'data-block': block.id },
-      ss ? h('div', { class: 'superset-head' }, icon('link'), 'Superset', h('span', { class: 'faint' }, `· repos ${fmtRest(block.rest)} après le tour`)) : null,
+      ss ? h('div', { class: 'superset-head' }, icon('link'), 'Superset') : null,
       block.items.map((it, ii) => itemView(block, bi, it, ii, ss, next)));
   }
 
@@ -39,10 +49,8 @@ export function createSessionEditor({ session, mode = 'live', onChange, onSetDon
     const ex = getExercise(it.exerciseId);
     const noWeight = ex?.load === 'pdc';
     const lastInBlock = ii === block.items.length - 1;
-    const planTxt = (it.plan?.sets || [])
-      .map((g) => `${g.n}×${fmtRange(g.min, g.max)}`)
-      .join(' + ');
-    const restTxt = !ss ? `repos ${fmtRest(block.rest)}` : lastInBlock ? `puis repos ${fmtRest(block.rest)}` : 'puis enchaîner';
+    // Le plan (séries × reps, repos) se lit dans les lignes : on n'affiche que l'enchaînement d'un superset.
+    const metaTxt = ss && !lastInBlock ? 'puis enchaîner' : '';
 
     const options = [...new Set([it.baseId || it.exerciseId, ...(it.alternatives || [])])];
 
@@ -53,10 +61,7 @@ export function createSessionEditor({ session, mode = 'live', onChange, onSetDon
     it.sets.forEach((set, si) => {
       const gk = set.kind === 'warmup' ? '__w' : set.tag;
       if (multiGroup && gk !== lastGroup) {
-        const count = it.sets.filter((s) => (s.kind === 'warmup' ? '__w' : s.tag) === gk).length;
-        rows.push(h('div', { class: 'group-label' },
-          set.kind === 'warmup' ? 'Échauffement' : set.tag || 'Travail',
-          set.kind === 'warmup' ? h('span', { class: 'faint' }, '≈ 60 % de la charge') : h('span', { class: 'faint' }, `${count} × ${fmtRange(set.min, set.max)} reps`)));
+        rows.push(h('div', { class: 'group-label' }, set.kind === 'warmup' ? 'Échauffement' : set.tag || 'Travail'));
         lastGroup = gk;
       }
       if (set.kind === 'work') workIdx++;
@@ -69,7 +74,7 @@ export function createSessionEditor({ session, mode = 'live', onChange, onSetDon
         ss ? h('span', { class: 'ex-letter' }, String.fromCharCode(65 + ii)) : null,
         h('button', { class: 'ex-title', onClick: () => navigate(`/exercise/${it.exerciseId}`) },
           h('div', { class: 'ex-name' }, ex?.name || 'Exercice supprimé'),
-          h('div', { class: 'ex-meta' }, [planTxt, restTxt].filter(Boolean).join(' · '))),
+          metaTxt ? h('div', { class: 'ex-meta' }, metaTxt) : null),
         iconButton('more', 'Options de l’exercice', () => itemMenu(block, bi, it, ii), 'small')),
       live && options.length > 1
         ? h('div', { class: 'alt-row' }, options.map((id) =>
@@ -118,11 +123,15 @@ export function createSessionEditor({ session, mode = 'live', onChange, onSetDon
       },
     });
     const prevTxt = set.prev ? (noWeight ? `${set.prev.r} reps` : `${fmtKg(set.prev.w || 0)}×${set.prev.r}`) : '';
+    const record = recordOf(it, set);
     const row = h('div', { class: `set-row ${set.kind} ${set.done ? 'done' : ''} ${isNext ? 'next' : ''} ${noWeight ? 'no-weight' : ''}` },
-      h('button', { class: 'set-num', 'aria-label': 'Options de la série', onClick: () => setMenu(it, si) }, set.kind === 'warmup' ? 'É' : num),
+      h('button', { class: `set-num ${record ? 'record' : ''}`, 'aria-label': record ? 'Record ! Options de la série' : 'Options de la série', onClick: () => setMenu(it, si) },
+        set.kind === 'warmup' ? 'É' : num,
+        record ? h('span', { class: 'crown', title: record === 'weight' ? 'Record de charge' : 'Record de charge totale' }, icon('crown', 12)) : null),
       h('div', { class: 'set-prev' },
-        live && prevTxt ? h('div', null, prevTxt) : null,
-        h('div', { class: 'target faint', style: { fontSize: '11.5px' } }, set.kind === 'warmup' ? 'échauff.' : `obj. ${fmtRange(set.min, set.max)}`)),
+        live && prevTxt ? h('div', { class: 'prev-val' }, prevTxt)
+          : set.kind === 'warmup' ? h('div', { class: 'faint' }, 'échauff.')
+          : h('div', { class: 'faint' }, `${fmtRange(set.min, set.max)} reps`)),
       weight,
       reps,
       h('button', { class: 'set-check', 'aria-label': set.done ? 'Annuler la validation' : 'Valider la série', onClick: () => toggleDone(row, it, ex, set, si, bi, ii) }, icon('check', 22)));
@@ -232,6 +241,12 @@ export function createSessionEditor({ session, mode = 'live', onChange, onSetDon
     set.doneAt = Date.now();
     propagateWeight(it, si);
     haptic();
+    const rec = recordOf(it, set);
+    if (rec) {
+      const total = Math.round(loadOf(getExercise(it.exerciseId), set.w, state.settings.bodyweight) * set.r);
+      toast(rec === 'weight' ? `👑 Record de charge : ${fmtKg(set.w)} kg` : `👑 Record de charge totale : ${total} kg (${fmtKg(set.w)} × ${set.r})`, { duration: 3500 });
+      successSound();
+    }
     onChange();
     render();
     onSetDone?.(bi, ii, si);
@@ -276,12 +291,14 @@ export function createSessionEditor({ session, mode = 'live', onChange, onSetDon
     const choice = await actionSheet(exerciseName(it.exerciseId), [
       { id: 'history', label: 'Historique et records', icon: 'chart' },
       { id: 'replace', label: 'Remplacer l’exercice', icon: 'swap' },
+      { id: 'rest', label: `Temps de repos · ${fmtRest(block.rest)}`, icon: 'timer' },
       { id: 'note', label: it.note ? 'Modifier la note' : 'Ajouter une note', icon: 'note' },
       bi > 0 ? { id: 'up', label: 'Monter', icon: 'up' } : null,
       bi < session.blocks.length - 1 ? { id: 'down', label: 'Descendre', icon: 'down' } : null,
       { id: 'delete', label: 'Retirer de la séance', icon: 'trash', danger: true },
     ]);
     if (choice === 'history') navigate(`/exercise/${it.exerciseId}`);
+    else if (choice === 'rest') editRest(block, it);
     else if (choice === 'replace') {
       const id = await pickExercise({ title: 'Remplacer par…', exclude: [it.exerciseId] });
       if (id) await swap(block, it, id);
@@ -305,6 +322,41 @@ export function createSessionEditor({ session, mode = 'live', onChange, onSetDon
       onChange();
       render();
     }
+  }
+
+  /** Réglage du repos d'un exercice (ou d'un superset), éventuellement mémorisé dans la séance type. */
+  function editRest(block, it) {
+    let value = block.rest ?? DEFAULT_REST;
+    let keep = !!session.templateId;
+    sheet((close) => [
+      h('p', { class: 'sheet-text' }, block.items.length > 1 ? 'Repos après chaque tour du superset.' : `Repos après chaque série : ${exerciseName(it.exerciseId)}.`),
+      h('div', { style: { display: 'flex', justifyContent: 'center', padding: '6px 0' } },
+        stepper({ value, step: 15, min: 0, max: 600, format: fmtRest, onChange: (v) => { value = v; } })),
+      session.templateId
+        ? h('div', { class: 'ed-line' }, h('span', null, 'Garder pour les prochaines séances'), toggle(keep, (v) => { keep = v; }, 'Garder'))
+        : null,
+      h('div', { class: 'sheet-actions' },
+        h('button', { class: 'btn ghost', onClick: () => close() }, 'Annuler'),
+        h('button', { class: 'btn primary', onClick: () => {
+          block.rest = value;
+          if (keep) persistRest(block, value);
+          onChange();
+          render();
+          close();
+          toast(`Repos : ${fmtRest(value)}`);
+        } }, 'Valider')),
+    ], { title: 'Temps de repos' });
+  }
+
+  /** Reporte le repos dans le bloc correspondant de la séance type (repéré par ses exercices). */
+  function persistRest(block, value) {
+    const t = getTemplate(session.templateId);
+    if (!t) return;
+    const ids = new Set(block.items.flatMap((x) => [x.exerciseId, x.baseId].filter(Boolean)));
+    const tb = t.blocks.find((b) => b.items.some((x) => ids.has(x.exerciseId)));
+    if (!tb) return;
+    tb.rest = value;
+    saveTemplate(t);
   }
 
   async function swap(block, it, newId) {

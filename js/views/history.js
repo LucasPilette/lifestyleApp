@@ -1,12 +1,12 @@
 // Historique : séances passées et progression par exercice.
 
 import { h, icon } from '../core/dom.js';
-import { state, doneSessions, sessionColor } from '../core/store.js';
+import { state, doneSessions, sessionColor, addPastSession, templateColor } from '../core/store.js';
 import { sessionStats, exerciseHistory } from '../core/training.js';
 import { fmtDuration, fmtVolume, fmtKg } from '../core/format.js';
 import { back, navigate } from '../core/router.js';
-import { pageHeader, segmented } from '../core/ui.js';
-import { dateKey, formatMonthLong, relativeDay, formatTime, agoLabel } from '../core/date.js';
+import { pageHeader, segmented, sheet, toast } from '../core/ui.js';
+import { dateKey, formatMonthLong, relativeDay, formatTime, agoLabel, todayKey, addDays } from '../core/date.js';
 
 export default function historyView(root) {
   let tab = sessionStorage.getItem('historyTab') || 'sessions';
@@ -65,13 +65,43 @@ export default function historyView(root) {
   }
 
   const render = () => (tab === 'sessions' ? renderSessions() : renderExercises());
+
+  /** Séance faite mais pas enregistrée dans l'app : choix de la séance et du jour. */
+  function addPast() {
+    let tplId = state.templates[0]?.id || null;
+    const date = h('input', { class: 'text-input', type: 'date', max: todayKey(), value: addDays(todayKey(), -1) });
+    const choices = h('div', { class: 'past-choices' });
+    const renderChoices = () => choices.replaceChildren(
+      ...state.templates.map((t) => h('button', {
+        class: `past-choice ${t.id === tplId ? 'sel' : ''}`, style: { '--tc': templateColor(t) },
+        onClick: () => { tplId = t.id; renderChoices(); },
+      }, h('span', { class: 'tc-dot' }), t.name)),
+      h('button', { class: `past-choice ${tplId === null ? 'sel' : ''}`, onClick: () => { tplId = null; renderChoices(); } }, 'Séance libre'));
+    renderChoices();
+    sheet((close) => [
+      h('p', { class: 'sheet-text' }, 'Pour une séance faite sans l’app. Elle compte pour ta flamme ; tu pourras ensuite saisir tes séries (ou les laisser vides).'),
+      h('div', { class: 'field-label' }, 'Séance'), choices,
+      h('div', { class: 'field-label' }, 'Jour'), date,
+      h('div', { class: 'sheet-actions' },
+        h('button', { class: 'btn ghost', onClick: () => close() }, 'Annuler'),
+        h('button', { class: 'btn primary', onClick: async () => {
+          const d = date.value;
+          if (!d || d > todayKey()) { toast('Choisis un jour passé'); return; }
+          const s = await addPastSession(tplId, d);
+          close();
+          sessionStorage.setItem('editOnOpen', s.id);
+          navigate(`/log/${s.id}`);
+        } }, 'Ajouter')),
+    ], { title: 'Ajouter une séance passée' });
+  }
   const page = h('div', { class: 'page' },
     segmented([['sessions', 'Séances'], ['exercises', 'Exercices']], tab, (t) => {
       tab = t;
       sessionStorage.setItem('historyTab', t);
       render();
     }),
-    content);
+    content,
+    h('button', { class: 'btn dashed block', onClick: addPast }, icon('plus', 18), 'Ajouter une séance passée'));
   render();
   root.append(h('div', { class: 'view' }, pageHeader({ title: 'Historique', onBack: () => back('/') }), page));
 }

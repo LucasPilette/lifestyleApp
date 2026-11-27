@@ -4,7 +4,8 @@
 import * as db from './db.js';
 import { SEED_EXERCISES, SEED_VERSION, TEMPLATE_COLORS, TEMPLATE_RENAMES, seedTemplates } from '../data/seed.js';
 import { clone, mergeDeep, uid } from './util.js';
-import { normalizeWarmups } from './training.js';
+import { normalizeWarmups, createSession } from './training.js';
+import { dateKey, parseKey, todayKey } from './date.js';
 
 export const DAY_FIELDS = ['sleepMin', 'sleepQ', 'kcal', 'prot', 'steps', 'weight', 'mood', 'moodNote'];
 
@@ -63,6 +64,7 @@ export async function initStore() {
   sortSessions();
 
   await applySeed();
+  await backfillWeek48();
   requestPersistentStorage();
 }
 
@@ -177,6 +179,34 @@ export function templateColor(t) {
 }
 
 /** Couleur d'une séance réalisée (copiée au démarrage, sinon celle de son modèle). */
+/**
+ * Ajoute une séance réalisée un jour passé (à 18 h). Les séries ne sont pas inventées :
+ * elles restent à valider via « Modifier » (propositions pré-remplies) ou peuvent rester vides.
+ */
+export async function addPastSession(templateId, date) {
+  const t = templateId ? getTemplate(templateId) : null;
+  const startedAt = parseKey(date).getTime() + 18 * 3600e3;
+  const s = createSession(t, { sessions: doneSessions(), exercises: state.exercises, now: startedAt });
+  s.status = 'done';
+  s.endedAt = startedAt + 60 * 60e3;
+  s.manual = true;
+  s.color = templateColor(t);
+  await saveSession(s);
+  return s;
+}
+
+/** Ajout ponctuel demandé par Lucas : Atlas mardi 24/11 et Zeus mercredi 25/11/2026 (une seule fois). */
+async function backfillWeek48() {
+  if (state.meta.backfillW48 || todayKey() > '2026-12-06') return;
+  for (const [id, date] of [['lower-b', '2026-11-24'], ['upper-a', '2026-11-25']]) {
+    if (!getTemplate(id)) continue;
+    const exists = state.sessions.some((s) => s.status === 'done' && s.templateId === id && dateKey(new Date(s.startedAt)) === date);
+    if (!exists) await addPastSession(id, date);
+  }
+  state.meta = { ...state.meta, backfillW48: true };
+  await db.kvSet('meta', state.meta);
+}
+
 export function sessionColor(s) {
   return s?.color || templateColor(getTemplate(s?.templateId)) || null;
 }

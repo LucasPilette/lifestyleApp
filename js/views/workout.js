@@ -26,20 +26,26 @@ export default function workoutView(root) {
   };
 
   // --- En-tête ---
-  const elapsed = h('div', { class: 'topbar-sub tnum' });
+  // Nom de la séance en petit, durée en grand ; barre de progression large sous l'en-tête.
+  const elapsed = h('div', { class: 'wo-time tnum', 'aria-label': 'Durée de la séance' });
   const finishBtn = h('button', { class: 'finish-btn', onClick: finish }, 'Terminer');
+  const progressBar = h('i');
+  const progressLabel = h('span', { class: 'wo-prog-label tnum' });
   const header = h('header', { class: 'topbar workout-top' },
     h('button', { class: 'icon-btn back', 'aria-label': 'Accueil (la séance continue)', onClick: () => navigate('/') }, icon('back')),
-    h('div', { class: 'topbar-title' }, h('h1', null, s.name), elapsed),
+    h('div', { class: 'topbar-title' }, h('h1', { class: 'wo-name' }, s.name), elapsed),
     h('div', { class: 'topbar-actions', style: { alignItems: 'center' } },
       iconButton('more', 'Options de la séance', sessionMenu),
-      finishBtn));
-  const progressBar = h('i');
-  const progress = h('div', { class: 'wo-progress' }, progressBar);
+      finishBtn),
+    h('div', { class: 'wo-prog', role: 'progressbar', 'aria-label': 'Progression de la séance' },
+      h('div', { class: 'wo-prog-track' }, progressBar),
+      progressLabel));
+  const progress = null;
 
   function updateProgress() {
     const { done, total } = sessionProgress(s);
     progressBar.style.width = total ? `${(done / total) * 100}%` : '0%';
+    progressLabel.textContent = `${done}/${total} séries`;
     finishBtn.classList.toggle('soft', done < total);
   }
 

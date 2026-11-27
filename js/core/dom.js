@@ -86,11 +86,12 @@ const ICONS = {
   sun: 'M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4',
   list: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
   scale: 'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM7.5 10a4.5 4.5 0 0 1 9 0zM12 10l1.5-2.5',
+  crown: 'M3 7.5l4.5 4L12 4.5l4.5 7 4.5-4L19 18H5L3 7.5zM5 21h14',
   smile: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01',
 };
 
 export function icon(name, size = 22, extraClass = '') {
-  const filled = name === 'play';
+  const filled = name === 'play' || name === 'crown';
   return s(
     'svg',
     {

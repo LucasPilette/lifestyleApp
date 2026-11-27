@@ -45,7 +45,9 @@ export default function summaryView(root, id) {
           return h('div', { class: 'row record-row' }, icon('trophy', 20),
             h('div', { class: 'row-main' },
               h('div', { class: 'row-title' }, exerciseName(r.exerciseId)),
-              h('div', { class: 'row-sub' }, r.type === 'weight' ? 'Charge la plus lourde' : '1RM estimé : ' + fmtKg(Math.round(r.value * 2) / 2) + ' kg')),
+              h('div', { class: 'row-sub' }, r.type === 'weight' ? '👑 Charge la plus lourde'
+                : r.type === 'volume' ? `👑 Charge totale : ${fmtNum(Math.round(r.value))} kg`
+                : '1RM estimé : ' + fmtKg(Math.round(r.value * 2) / 2) + ' kg')),
             h('div', { class: 'row-end' }, ex?.load === 'pdc' ? `${r.r} reps` : `${fmtKg(r.w)} kg × ${r.r}`));
         }))]
       : null,

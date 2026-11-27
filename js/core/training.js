@@ -91,7 +91,7 @@ export function exerciseHistory(exerciseId, sessions, exercise, bodyweight) {
 
 /** Records d'un exercice (optionnellement avant une date). */
 export function exerciseRecords(exerciseId, sessions, exercise, bodyweight, beforeTs = Infinity, excludeId = null) {
-  const rec = { e1rm: null, weight: null, reps: null };
+  const rec = { e1rm: null, weight: null, reps: null, setVolume: null };
   for (const h of exerciseHistory(exerciseId, sessions, exercise, bodyweight)) {
     if (h.date >= beforeTs || h.sessionId === excludeId) continue;
     for (const st of h.sets) {
@@ -101,6 +101,8 @@ export function exerciseRecords(exerciseId, sessions, exercise, bodyweight, befo
       const w = st.w || 0;
       if (!rec.weight || w > rec.weight.w || (w === rec.weight.w && st.r > rec.weight.r)) rec.weight = { w, r: st.r, date: h.date };
       if (!rec.reps || st.r > rec.reps.r) rec.reps = { w, r: st.r, date: h.date };
+      const vol = load * (st.r || 0);
+      if (vol > 0 && (!rec.setVolume || vol > rec.setVolume.value)) rec.setVolume = { value: vol, w, r: st.r, date: h.date };
     }
   }
   return rec;
@@ -353,6 +355,20 @@ export function sessionStats(session, exercises, bodyweight) {
   return { sets, reps, volume, exercises: exIds.size, duration: end - session.startedAt };
 }
 
+/**
+ * Une série bat-elle un record (antérieur à la séance) ?
+ * 'weight' = charge la plus lourde, 'volume' = charge totale de la série (charge × reps).
+ * Rien la première fois sur un exercice (pas de référence).
+ */
+export function setRecordType(set, exercise, rec, bodyweight) {
+  if (!set.done || set.kind !== 'work' || !rec?.weight) return null;
+  const w = set.w || 0;
+  if (exercise?.load !== 'pdc' && w > rec.weight.w) return 'weight';
+  const vol = loadOf(exercise, set.w, bodyweight) * (set.r || 0);
+  if (vol > 0 && rec.setVolume && vol > rec.setVolume.value + 1e-9) return 'volume';
+  return null;
+}
+
 /** Records battus pendant une séance. */
 export function sessionRecords(session, sessions, exercises, bodyweight) {
   const out = [];
@@ -365,13 +381,17 @@ export function sessionRecords(session, sessions, exercises, bodyweight) {
     if (!before.weight) continue; // première fois : pas de record à célébrer
     let bestW = null;
     let bestE = null;
+    let bestV = null;
     for (const s of it.sets.filter(isWorkDone)) {
       const w = s.w || 0;
-      if (w > before.weight.w && (!bestW || w > bestW.w)) bestW = { w, r: s.r };
+      if (ex?.load !== 'pdc' && w > before.weight.w && (!bestW || w > bestW.w)) bestW = { w, r: s.r };
       const est = e1rm(loadOf(ex, s.w, bodyweight), s.r);
       if (before.e1rm && est > before.e1rm.value + 0.01 && (!bestE || est > bestE.value)) bestE = { value: est, w, r: s.r };
+      const vol = loadOf(ex, s.w, bodyweight) * (s.r || 0);
+      if (before.setVolume && vol > before.setVolume.value + 1e-9 && (!bestV || vol > bestV.value)) bestV = { value: vol, w, r: s.r };
     }
     if (bestW) out.push({ exerciseId: it.exerciseId, type: 'weight', w: bestW.w, r: bestW.r });
+    else if (bestV) out.push({ exerciseId: it.exerciseId, type: 'volume', w: bestV.w, r: bestV.r, value: bestV.value });
     else if (bestE) out.push({ exerciseId: it.exerciseId, type: 'e1rm', w: bestE.w, r: bestE.r, value: bestE.value });
   }
   return out;

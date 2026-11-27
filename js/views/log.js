@@ -52,6 +52,7 @@ export default function logView(root, id) {
               icon('chevron', 18, 'chev'));
           })),
         s.note ? [h('div', { class: 'section-title' }, 'Note'), h('div', { class: 'card muted' }, s.note)] : null,
+        st.sets === 0 ? h('div', { class: 'banner' }, icon('info', 20), h('div', null, 'Aucune série saisie. Touche « Modifier » pour valider tes séries : les charges proposées sont pré-remplies.')) : null,
         h('button', { class: 'btn block', onClick: startEdit }, icon('edit', 18), 'Modifier la séance')));
   }
 
@@ -116,7 +117,11 @@ export default function logView(root, id) {
     }
   }
 
-  renderRead();
+  // Ouverture directe en modification (séance ajoutée a posteriori)
+  if (sessionStorage.getItem('editOnOpen') === s.id) {
+    sessionStorage.removeItem('editOnOpen');
+    startEdit();
+  } else renderRead();
   const tc = sessionColor(s);
   root.append(h('div', { class: `view ${tc ? 'tinted' : ''}`, style: tc ? { '--tc': tc } : null }, container));
   return () => {

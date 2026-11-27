@@ -318,3 +318,18 @@ test('semaine d’entraînement : séances restantes et jours restants', () => {
   assert.deepEqual(wk, { count: 2, min: 3, needed: 1, daysLeft: 3 }); // ven., sam., dim.
   assert.equal(weekTraining([], '2026-11-29', 3).daysLeft, 1); // dimanche
 });
+
+test('couronne : record de charge ou de charge totale de la série', async () => {
+  const { setRecordType } = await import('../js/core/training.js');
+  const bench = exercises.get('bench');
+  const hist = [done('upper-a', 1000, { bench: [[100, 5], [100, 5], [95, 8]] })];
+  const rec = exerciseRecords('bench', hist, bench, 80);
+  assert.equal(rec.setVolume.value, 760); // 95 × 8
+  const mk = (w, r) => ({ kind: 'work', done: true, w, r });
+  assert.equal(setRecordType(mk(102.5, 3), bench, rec, 80), 'weight');
+  assert.equal(setRecordType(mk(100, 8), bench, rec, 80), 'volume'); // 800 > 760
+  assert.equal(setRecordType(mk(100, 7), bench, rec, 80), null); // 700
+  assert.equal(setRecordType({ ...mk(110, 5), kind: 'warmup' }, bench, rec, 80), null);
+  // première fois : jamais de couronne
+  assert.equal(setRecordType(mk(60, 10), bench, exerciseRecords('bench', [], bench, 80), 80), null);
+});
