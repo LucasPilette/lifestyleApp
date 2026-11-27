@@ -4,6 +4,7 @@
 import * as db from './db.js';
 import { SEED_EXERCISES, SEED_VERSION, seedTemplates } from '../data/seed.js';
 import { clone, mergeDeep, uid } from './util.js';
+import { normalizeWarmups } from './training.js';
 
 export const DAY_FIELDS = ['sleepMin', 'sleepQ', 'kcal', 'prot', 'steps'];
 
@@ -73,6 +74,11 @@ async function applySeed() {
   if (missing.length) await db.putMany('exercises', missing);
   if (v === 0 && state.templates.length === 0) {
     state.templates = seedTemplates();
+    await db.putMany('templates', state.templates);
+  }
+  // v2 : une seule série d'échauffement, sur le premier exercice de chaque séance.
+  if (v >= 1 && v < 2 && state.templates.length) {
+    state.templates.forEach(normalizeWarmups);
     await db.putMany('templates', state.templates);
   }
   state.meta = { ...state.meta, seedVersion: SEED_VERSION, createdAt: state.meta.createdAt || Date.now() };

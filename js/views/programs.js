@@ -126,7 +126,7 @@ export function programEditView(root, id) {
         h('span', { class: 'name' }, exerciseName(it.exerciseId)),
         icon('swap', 18, 'faint')),
       groups,
-      h('div', { class: 'ed-line' }, h('span', null, 'Échauffement guidé avant les séries'), toggle(!!it.warmup, (v) => { it.warmup = v; save(); }, 'Échauffement')),
+      h('div', { class: 'ed-line' }, h('span', null, 'Série d’échauffement (1er exercice)'), toggle(!!it.warmup, (v) => { it.warmup = v; save(); }, 'Échauffement')),
       h('div', null,
         h('div', { class: 'field-label' }, 'Alternatives (choix pendant la séance)'),
         h('div', { class: 'ed-alts' },

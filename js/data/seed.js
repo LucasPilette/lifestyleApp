@@ -10,7 +10,7 @@ export const MUSCLES = [
   'Quadriceps', 'Ischios', 'Fessiers', 'Mollets', 'Abdos', 'Autre',
 ];
 
-export const SEED_VERSION = 1;
+export const SEED_VERSION = 2;
 
 const ex = (id, name, muscle, load = 'kg', inc = 2.5, bar = false) => ({ id, name, muscle, load, inc, bar });
 
@@ -127,7 +127,7 @@ export function seedTemplates() {
       subtitle: 'Quadriceps et fessiers',
       order: 3,
       blocks: [
-        block(150, item('leg_press', [[3, 10, 15]], { alt: ['hack_squat'] })),
+        block(150, item('leg_press', [[3, 10, 15]], { alt: ['hack_squat'], warmup: true })),
         block(150, item('hip_thrust', [[3, 8, 12]])),
         block(90, item('leg_curl_seated', [[3, 10, 15]], { alt: ['leg_curl_lying'] })),
         block(90, item('calf', [[3, 10, 15]])),

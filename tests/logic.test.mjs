@@ -6,7 +6,7 @@ import { addDays, weekStart, diffDays, keysBetween, monthEnd, dateKey } from '..
 import { parseNum, fmtSleep, fmtClock, fmtRest } from '../js/core/format.js';
 import {
   e1rm, planGroup, warmupPlan, createSession, nextPending, restAfter, lastPerformance,
-  propagateWeight, pruneSession, sessionStats, sessionRecords, suggestTemplate, exerciseRecords,
+  propagateWeight, pruneSession, normalizeWarmups, sessionStats, sessionRecords, suggestTemplate, exerciseRecords,
 } from '../js/core/training.js';
 import { periodData, summary, streak, meetsGoal, rollingAvg } from '../js/core/metrics.js';
 import { SEED_EXERCISES, seedTemplates } from '../js/data/seed.js';
@@ -81,14 +81,22 @@ test('sans historique : pas de charge proposée', () => {
   assert.equal(r.hint, null);
 });
 
-test('échauffement barre', () => {
-  const w = warmupPlan(100, exercises.get('bench'));
-  assert.deepEqual(w.map((s) => s.pw), [20, 50, 70, 85]);
-  const light = warmupPlan(40, exercises.get('bench'));
-  assert.ok(light.every((s) => s.pw < 40));
-  assert.equal(light[0].pw, 20);
-  const dips = warmupPlan(25, exercises.get('dips_weighted'));
-  assert.deepEqual(dips.map((s) => s.pw), [0, 12.5, 20]);
+test('une seule série d’échauffement (~60 %)', () => {
+  assert.deepEqual(warmupPlan(100, exercises.get('bench')), [{ pw: 60, pr: 6 }]);
+  assert.deepEqual(warmupPlan(25, exercises.get('bench')), [{ pw: 20, pr: 6 }]); // jamais sous la barre vide
+  assert.deepEqual(warmupPlan(140, exercises.get('leg_press')), [{ pw: 85, pr: 6 }]);
+  assert.deepEqual(warmupPlan(25, exercises.get('dips_weighted')), [{ pw: 0, pr: 8 }]); // au poids du corps
+  assert.deepEqual(warmupPlan(null, exercises.get('bench')), [{ pw: null, pr: 8 }]);
+});
+
+test('migration : échauffement uniquement sur le 1er exercice', () => {
+  const t = seedTemplates().find((x) => x.id === 'upper-b');
+  t.blocks[2].items[0].warmup = true;
+  normalizeWarmups(t);
+  const flags = t.blocks.flatMap((b) => b.items.map((it) => it.warmup));
+  assert.equal(flags[0], true);
+  assert.ok(flags.slice(1).every((f) => f === false));
+  assert.ok(seedTemplates().every((x) => x.blocks[0].items[0].warmup));
 });
 
 test('dernière performance : priorité au même modèle', () => {
@@ -109,7 +117,7 @@ test('création de séance : échauffement + groupes + propositions', () => {
   const warm = bench.sets.filter((x) => x.kind === 'warmup');
   const heavy = bench.sets.filter((x) => x.tag === 'Lourd');
   const light = bench.sets.filter((x) => x.tag === 'Léger');
-  assert.deepEqual(warm.map((x) => x.pw), [20, 52.5, 72.5, 87.5]); // basé sur 102,5 kg
+  assert.deepEqual(warm.map((x) => x.pw), [62.5]); // 60 % de 102,5 kg
   assert.deepEqual(heavy.map((x) => x.pw), [102.5, 102.5, 102.5]);
   assert.equal(light.length, 2);
   assert.deepEqual(light.map((x) => x.pw), [85, 85]); // 8 puis 7 : pas encore de montée
@@ -145,13 +153,16 @@ test('repos : échauffement court, aucun repos après la dernière série', () =
   assert.equal(restAfter(s, 4, 1, 2, {}), 0);
 });
 
-test('propagation de la charge aux séries suivantes du même groupe', () => {
+test('propagation de la charge et des reps aux séries suivantes du même groupe', () => {
   const s = createSession(upperA, { sessions: [], exercises });
   const it = s.blocks[1].items[0]; // tractions lestées 4×4-6
   it.sets[0].w = 15;
+  it.sets[0].r = 5;
   it.sets[0].done = true;
+  it.sets[2].r = 4; // déjà saisi : on ne l'écrase pas
   propagateWeight(it, 0);
   assert.deepEqual(it.sets.map((x) => x.pw), [null, 15, 15, 15]);
+  assert.deepEqual(it.sets.slice(1).map((x) => x.pr), [5, 4, 5]);
 });
 
 test('fin de séance : purge, stats et records', () => {

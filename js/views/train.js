@@ -14,7 +14,7 @@ export function estimateMinutes(t) {
   let sec = 0;
   for (const b of t.blocks) {
     const rounds = Math.max(...b.items.map((it) => it.sets.reduce((a, g) => a + g.n, 0)));
-    const work = b.items.reduce((a, it) => a + it.sets.reduce((x, g) => x + g.n, 0) * 45 + (it.warmup ? 240 : 0), 0);
+    const work = b.items.reduce((a, it) => a + it.sets.reduce((x, g) => x + g.n, 0) * 45 + (it.warmup ? 90 : 0), 0);
     sec += work + rounds * (b.rest || 0);
   }
   return Math.round(sec / 300) * 5;

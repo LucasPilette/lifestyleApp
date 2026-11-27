@@ -150,34 +150,19 @@ export function planGroup(group, lastSets, exercise) {
   return { plan, hint, progressed: allHitMax };
 }
 
+export const WARMUP_PCT = 0.6;
+export const WARMUP_REPS = 6;
+
 /**
- * Séries d'échauffement progressives vers la charge de travail.
- * Barre : barre vide ×10, 50 % ×5, 70 % ×3, 85 % ×1-2 (selon la charge).
+ * Une seule série d'échauffement : ~60 % de la charge de travail × 6
+ * (au moins la barre vide ; au poids du corps pour les exercices lestés).
  */
 export function warmupPlan(topW, exercise) {
   const type = exercise?.load || 'kg';
-  if (topW == null) {
-    return [{ pw: null, pr: 8 }, { pw: null, pr: 5 }, { pw: null, pr: 3 }];
-  }
-  if (type === 'lest') {
-    const sets = [{ pw: 0, pr: 8 }];
-    if (topW >= 10) sets.push({ pw: roundTo(topW * 0.5, 2.5), pr: 3 });
-    if (topW >= 20) sets.push({ pw: roundTo(topW * 0.8, 2.5), pr: 1 });
-    return sets;
-  }
+  if (type === 'lest' || type === 'pdc') return [{ pw: 0, pr: 8 }];
+  if (topW == null) return [{ pw: null, pr: 8 }];
   const bar = exercise?.bar ? 20 : 0;
-  const steps = [];
-  if (bar) steps.push({ pct: 0, reps: 10 });
-  steps.push({ pct: 0.5, reps: 5 }, { pct: 0.7, reps: 3 });
-  if (topW >= 60) steps.push({ pct: 0.85, reps: 1 });
-  const out = [];
-  for (const st of steps) {
-    const w = st.pct === 0 ? bar : Math.max(bar, roundTo(topW * st.pct, 2.5));
-    if (w >= topW) continue;
-    if (out.length && out[out.length - 1].pw === w) continue;
-    out.push({ pw: w, pr: st.reps });
-  }
-  return out;
+  return [{ pw: Math.max(bar, roundTo(topW * WARMUP_PCT, 2.5)), pr: WARMUP_REPS }];
 }
 
 /** Construit l'élément de séance d'un exercice à partir de son plan et de l'historique. */
@@ -300,15 +285,30 @@ export function restAfter(session, bi, ii, si, settings = {}) {
   return block.rest ?? DEFAULT_REST;
 }
 
-/** Après validation : les séries suivantes du même groupe reprennent la charge utilisée. */
+/**
+ * Après validation d'une série : les séries suivantes du même groupe (non validées,
+ * non saisies) proposent la charge et les reps qui viennent d'être faites.
+ */
 export function propagateWeight(item, si) {
   const ref = item.sets[si];
-  if (ref.kind === 'warmup') return; // l'échauffement monte en charge : rien à propager
+  if (ref.kind === 'warmup') return; // l'échauffement est plus léger : rien à propager
   for (let j = si + 1; j < item.sets.length; j++) {
     const s = item.sets[j];
     if (s.kind !== ref.kind || s.tag !== ref.tag) break;
-    if (!s.done && s.w == null) s.pw = ref.w;
+    if (s.done) continue;
+    if (s.w == null) s.pw = ref.w;
+    if (s.r == null && ref.r) s.pr = ref.r;
   }
+}
+
+/** Échauffement uniquement sur le premier exercice de la séance. */
+export function normalizeWarmups(template) {
+  let first = true;
+  for (const b of template.blocks) for (const it of b.items) {
+    it.warmup = first;
+    first = false;
+  }
+  return template;
 }
 
 export function sessionProgress(session) {

@@ -425,9 +425,19 @@ select.text-input { appearance: none; -webkit-appearance: none; }
 .set-head > :nth-child(3), .set-head > :nth-child(4) { text-align: center; }
 .group-label { font-size: 12px; font-weight: 650; color: var(--text-2); padding: 8px 6px 4px; display: flex; gap: 8px; align-items: baseline; }
 .group-label .faint { font-weight: 500; }
-.set-row { padding: 4px; border-radius: 12px; transition: background 0.2s; }
+.set-row { position: relative; padding: 4px; border-radius: 12px; background: var(--surface); transition: background 0.2s; touch-action: pan-y; }
 .set-row.next { background: var(--surface-2); }
-.set-row.done { background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.set-row.done { background: color-mix(in srgb, var(--accent) 9%, var(--surface)); }
+.set-row .num-input::placeholder { color: var(--text-2); font-weight: 600; }
+/* Glisser vers la gauche pour supprimer */
+.set-swipe { position: relative; border-radius: 12px; overflow: hidden; }
+.set-del-bg {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: flex-end; gap: 8px;
+  padding-right: 18px; border-radius: 12px; font-size: 14px; font-weight: 700;
+  background: color-mix(in srgb, var(--danger) 45%, var(--surface)); color: #fff; opacity: 0; transition: background 0.15s;
+}
+.set-swipe.swiping .set-del-bg { opacity: 1; }
+.set-swipe.armed .set-del-bg { background: var(--danger); }
 .set-num { height: 34px; border-radius: 9px; font-weight: 750; font-size: 14px; color: var(--text-2); font-variant-numeric: tabular-nums; }
 .set-num:active { background: var(--surface-3); }
 .set-row.warmup .set-num { color: var(--text-3); font-size: 12px; }

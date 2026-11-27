@@ -56,7 +56,7 @@ export function createSessionEditor({ session, mode = 'live', onChange, onSetDon
         const count = it.sets.filter((s) => (s.kind === 'warmup' ? '__w' : s.tag) === gk).length;
         rows.push(h('div', { class: 'group-label' },
           set.kind === 'warmup' ? 'Échauffement' : set.tag || 'Travail',
-          set.kind === 'warmup' ? h('span', { class: 'faint' }, 'montée progressive') : h('span', { class: 'faint' }, `${count} × ${fmtRange(set.min, set.max)} reps`)));
+          set.kind === 'warmup' ? h('span', { class: 'faint' }, '≈ 60 % de la charge') : h('span', { class: 'faint' }, `${count} × ${fmtRange(set.min, set.max)} reps`)));
         lastGroup = gk;
       }
       if (set.kind === 'work') workIdx++;
@@ -126,7 +126,85 @@ export function createSessionEditor({ session, mode = 'live', onChange, onSetDon
       weight,
       reps,
       h('button', { class: 'set-check', 'aria-label': set.done ? 'Annuler la validation' : 'Valider la série', onClick: () => toggleDone(row, it, ex, set, si, bi, ii) }, icon('check', 22)));
-    return row;
+    const wrap = h('div', { class: 'set-swipe' }, h('div', { class: 'set-del-bg', 'aria-hidden': 'true' }, icon('trash', 20), 'Supprimer'), row);
+    attachSwipe(wrap, row, () => deleteSet(it, set));
+    return wrap;
+  }
+
+  /** Supprime une série, avec possibilité d'annuler. */
+  function deleteSet(it, set) {
+    const idx = it.sets.indexOf(set);
+    if (idx < 0) return;
+    it.sets.splice(idx, 1);
+    onChange();
+    render();
+    toast(set.kind === 'warmup' ? 'Échauffement supprimé' : 'Série supprimée', {
+      action: 'Annuler',
+      duration: 4000,
+      onAction: () => {
+        it.sets.splice(Math.min(idx, it.sets.length), 0, set);
+        onChange();
+        render();
+      },
+    });
+  }
+
+  /**
+   * Glisser une série vers la gauche pour la supprimer.
+   * Le geste ne s'arme que si le mouvement est franchement horizontal (le défilement vertical reste libre).
+   */
+  function attachSwipe(wrap, row, onDelete) {
+    let x0 = null;
+    let y0 = 0;
+    let dx = 0;
+    let mode = null; // null | 'h' | 'v'
+    const threshold = () => Math.min(130, row.offsetWidth * 0.33);
+    row.addEventListener('touchstart', (e) => {
+      if (e.touches.length > 1) return;
+      x0 = e.touches[0].clientX;
+      y0 = e.touches[0].clientY;
+      dx = 0;
+      mode = null;
+      row.style.transition = 'none';
+    }, { passive: true });
+    row.addEventListener('touchmove', (e) => {
+      if (x0 == null) return;
+      const mx = e.touches[0].clientX - x0;
+      const my = e.touches[0].clientY - y0;
+      if (!mode) {
+        if (Math.abs(mx) < 10 && Math.abs(my) < 10) return;
+        mode = mx < 0 && Math.abs(mx) > Math.abs(my) * 1.3 ? 'h' : 'v';
+        if (mode === 'h') {
+          wrap.classList.add('swiping');
+          if (row.contains(document.activeElement)) document.activeElement.blur();
+        }
+      }
+      if (mode !== 'h') return;
+      e.preventDefault();
+      dx = Math.min(0, mx);
+      row.style.transform = `translateX(${dx}px)`;
+      const armed = -dx > threshold();
+      if (armed !== wrap.classList.contains('armed')) {
+        wrap.classList.toggle('armed', armed);
+        if (armed) haptic(8);
+      }
+    }, { passive: false });
+    const end = () => {
+      if (mode === 'h') {
+        row.style.transition = 'transform 0.2s ease';
+        if (-dx > threshold()) {
+          row.style.transform = 'translateX(-105%)';
+          setTimeout(onDelete, 190);
+        } else {
+          row.style.transform = '';
+          setTimeout(() => wrap.classList.remove('swiping', 'armed'), 200);
+        }
+      }
+      x0 = null;
+      mode = null;
+    };
+    row.addEventListener('touchend', end);
+    row.addEventListener('touchcancel', end);
   }
 
   function toggleDone(row, it, ex, set, si, bi, ii) {
