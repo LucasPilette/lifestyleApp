@@ -973,3 +973,7 @@ input[type="date"].text-input { color-scheme: dark; min-height: 48px; }
 }
 .goal-raise:active { background: rgba(255, 204, 77, 0.08); }
 .goal.is-lost { border-color: rgba(255, 162, 74, 0.45); }
+
+.goal-est { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12.5px; color: var(--text-2); }
+.goal-est b { color: #fff; font-family: var(--font-round); }
+.goal-est .icon { color: var(--text-3); }

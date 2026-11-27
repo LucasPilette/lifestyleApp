@@ -55,7 +55,7 @@ export function editGoal(id, { current = null, raise = false } = {}) {
       if (id === 'bench') {
         const cur = numInput({ value: str(cfg.current), decimal: true, label: '1RM actuel' });
         readCurrent = () => parseNum(cur.value);
-        parts.push(h('div', { class: 'field-label', style: { marginTop: '4px' } }, '1RM actuel (mis à jour automatiquement après tes séances)'),
+        parts.push(h('div', { class: 'field-label', style: { marginTop: '4px' } }, '1RM réel actuel (mis à jour quand tu passes une barre plus lourde en séance)'),
           h('div', { class: 'with-unit' }, cur, h('span', { class: 'unit' }, 'kg')));
       }
 

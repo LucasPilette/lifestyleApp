@@ -64,6 +64,7 @@ export default function goalsView(root) {
           h('span', { class: 'goal-current' }, r.value != null ? fmt(r.value) : '–'),
           h('span', { class: 'goal-target' }, `/ ${dirTxt ? `${dirTxt} ` : ''}${fmt(r.cfg.target)}`)),
         h('div', { class: 'goal-sub' }, r.sub, r.since ? ` · ${agoLabel(r.since)}` : ''),
+        r.id === 'bench' && r.est ? h('div', { class: 'goal-est' }, icon('chart', 14), `1RM estimé d’après tes meilleures séries : `, h('b', null, def.fmt(r.est))) : null,
         h('div', { class: 'goal-bar' }, h('i', { style: { width: `${Math.round(r.progress * 100)}%` } })),
         statusEl),
       r.status === 'met'

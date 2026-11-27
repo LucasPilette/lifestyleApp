@@ -9,7 +9,7 @@ import { actionSheet, confirmSheet, promptSheet, toast } from '../core/ui.js';
 import { keepAwake, restDoneSound, countdownBeep, successSound, haptic, unlockAudio } from '../core/feedback.js';
 import { debounce } from '../core/util.js';
 import { createSessionEditor } from '../components/session-editor.js';
-import { sessionBenchE1rm } from '../core/goals.js';
+import { sessionBenchLift } from '../core/goals.js';
 import { fmtKg as fmtKg2 } from '../core/format.js';
 
 export default function workoutView(root) {
@@ -218,12 +218,12 @@ export default function workoutView(root) {
     s.rest = null;
     await saveSession(s);
     successSound();
-    // Objectif bench : un 1RM estimé supérieur au 1RM enregistré le met à jour.
-    const bench = Math.round(sessionBenchE1rm(s) * 2) / 2;
+    // Objectif bench : une barre réellement passée plus lourde que le 1RM enregistré le met à jour.
+    const bench = sessionBenchLift(s);
     const benchGoal = state.settings.objectives?.bench;
     if (bench > 0 && bench > (benchGoal?.current || 0)) {
       updateSettings({ objectives: { bench: { current: bench } } });
-      setTimeout(() => toast(`🏆 Nouveau 1RM au bench : ${fmtKg2(bench)} kg (objectifs mis à jour)`, { duration: 5000 }), 400);
+      setTimeout(() => toast(`🏆 Nouveau 1RM réel au bench : ${fmtKg2(bench)} kg (objectifs mis à jour)`, { duration: 5000 }), 400);
     }
     navigate(`/summary/${s.id}`, { replace: true });
   }

@@ -342,14 +342,17 @@ test('objectifs : valeurs calculées depuis les données', async () => {
     ['2026-11-20', { weight: 79.2, sleepMin: 420, kcal: 2400 }],
     ['2026-11-26', { weight: 78.6, sleepMin: 480, kcal: 2800 }],
   ]);
-  const sessions = [done('upper-a', 1000, { bench: [[120, 5], [125, 3]] })]; // e1RM 140 et 137,5
+  const sessions = [done('upper-a', 1000, { bench: [[120, 5], [125, 3]] })]; // barre max 125 ; e1RM 140
   const ctx = { days, sessions, exercises, today };
   assert.equal(g.currentValue('weight', {}, ctx).value, 78.6); // dernière pesée
   assert.equal(g.currentValue('sleep', {}, ctx).value, 450); // moyenne 30 j
   assert.equal(g.currentValue('kcal', {}, ctx).value, 2600);
-  // bench : max entre le 1RM enregistré (147) et l'historique (140)
+  // bench : 1RM réel = max entre le 1RM enregistré et la barre la plus lourde passée ; estimation à part
   assert.equal(g.currentValue('bench', { current: 147 }, ctx).value, 147);
-  assert.equal(Math.round(g.currentValue('bench', { current: 130 }, ctx).value), 140);
+  assert.equal(g.currentValue('bench', { current: 110 }, ctx).value, 125);
+  assert.equal(Math.round(g.currentValue('bench', { current: 147 }, ctx).est), 140);
+  // l'estimation seule ne fait pas atteindre l'objectif
+  assert.equal(g.evaluateGoal('bench', { target: 140, current: 130, dir: 'min' }, ctx).status, 'progress');
 });
 
 test('objectifs : statut atteint / à reconquérir et progression', async () => {
@@ -373,4 +376,5 @@ test('objectifs : 1RM bench d’une séance', async () => {
   const g = await import('../js/core/goals.js');
   const s = done('upper-a', 1, { bench: [[130, 5], [140, 2]] });
   assert.ok(Math.abs(g.sessionBenchE1rm(s) - 151.67) < 0.01); // 130 × (1 + 5/30)
+  assert.equal(g.sessionBenchLift(s), 140); // barre réellement passée
 });

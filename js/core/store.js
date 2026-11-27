@@ -6,7 +6,7 @@ import { SEED_EXERCISES, SEED_VERSION, TEMPLATE_COLORS, TEMPLATE_RENAMES, seedTe
 import { clone, mergeDeep, uid } from './util.js';
 import { normalizeWarmups, createSession } from './training.js';
 import { dateKey, parseKey, todayKey } from './date.js';
-import { DEFAULT_OBJECTIVES } from './goals.js';
+import { DEFAULT_OBJECTIVES, bestBenchLift } from './goals.js';
 
 export const DAY_FIELDS = ['sleepMin', 'sleepQ', 'kcal', 'prot', 'steps', 'weight', 'mood', 'moodNote'];
 
@@ -67,6 +67,7 @@ export async function initStore() {
 
   await applySeed();
   await backfillWeek48();
+  await fixBenchRealOnce();
   requestPersistentStorage();
 }
 
@@ -206,6 +207,23 @@ async function backfillWeek48() {
     if (!exists) await addPastSession(id, date);
   }
   state.meta = { ...state.meta, backfillW48: true };
+  await db.kvSet('meta', state.meta);
+}
+
+/**
+ * Correctif ponctuel : l'objectif bench se juge désormais sur le 1RM réel.
+ * Une version précédente a pu y écrire un 1RM estimé : on repart de 147 kg (valeur donnée par Lucas)
+ * ou de la barre la plus lourde réellement passée si elle est supérieure.
+ */
+async function fixBenchRealOnce() {
+  if (state.meta.benchReal) return;
+  const lift = bestBenchLift(state.sessions);
+  const bench = state.settings.objectives?.bench;
+  if (bench) {
+    state.settings = mergeDeep(state.settings, { objectives: { bench: { current: Math.max(147, lift), achievedAt: null } } });
+    await db.kvSet('settings', state.settings);
+  }
+  state.meta = { ...state.meta, benchReal: true };
   await db.kvSet('meta', state.meta);
 }
 

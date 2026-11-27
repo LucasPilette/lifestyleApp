@@ -42,6 +42,23 @@ export function bestBenchE1rm(sessions, exercises) {
   return hist.reduce((m, x) => Math.max(m, x.e1rm), 0);
 }
 
+/** Barre la plus lourde réellement passée au bench (série de travail validée, au moins 1 rep). */
+export function bestBenchLift(sessions) {
+  let best = 0;
+  for (const s of sessions) if (s.status === 'done') best = Math.max(best, sessionBenchLift(s));
+  return best;
+}
+
+/** Barre la plus lourde passée au bench pendant une séance. */
+export function sessionBenchLift(session) {
+  let best = 0;
+  for (const b of session.blocks) for (const it of b.items) {
+    if (it.exerciseId !== BENCH_ID) continue;
+    for (const s of it.sets) if (s.done && s.kind === 'work' && (s.r || 0) >= 1) best = Math.max(best, s.w || 0);
+  }
+  return best;
+}
+
 /** Meilleur 1RM estimé au bench sur une séance donnée. */
 export function sessionBenchE1rm(session) {
   let best = 0;
@@ -71,9 +88,10 @@ export function currentValue(id, cfg, { days, sessions, exercises, today }) {
     return { value: a.avg, sub: a.count ? `moyenne 30 j · ${a.count} j saisis` : 'pas encore de données' };
   }
   if (id === 'bench') {
-    const fromHistory = bestBenchE1rm(sessions, exercises);
-    const value = Math.max(cfg?.current || 0, fromHistory) || null;
-    return { value, sub: '1RM estimé' };
+    // L'objectif se juge sur le 1RM réel (barre passée) ; l'estimation est affichée à titre indicatif.
+    const value = Math.max(cfg?.current || 0, bestBenchLift(sessions)) || null;
+    const est = bestBenchE1rm(sessions, exercises) || null;
+    return { value, est, sub: '1RM réel (barre passée en séance)' };
   }
   return { value: null, sub: '' };
 }
