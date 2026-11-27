@@ -51,8 +51,9 @@ export function actionSheet(title, actions) {
             h('button', {
               class: `action-item ${a.danger ? 'danger' : ''}`,
               onClick: () => {
-                close();
+                // Résoudre AVANT de fermer : la fermeture résout sinon `null` (= annulé).
                 resolve(a.id);
+                close();
                 a.onClick?.();
               },
             }, a.icon ? icon(a.icon, 20) : null, h('span', null, a.label)),
