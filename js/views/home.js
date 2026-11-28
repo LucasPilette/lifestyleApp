@@ -4,13 +4,15 @@
 import { h, icon, iconButton, numInput } from '../core/dom.js';
 import { state, getDay, setDayField, activeSession, doneSessions, sessionColor, updateSettings } from '../core/store.js';
 import { todayKey, addDays, formatLong, formatShort, weekStart, dateKey, agoLabel, formatWeekday } from '../core/date.js';
-import { METRICS, MOODS, meetsGoal, dayChecklist, perfectStreak, weekTraining, weightRequired, lastValueBefore } from '../core/metrics.js';
+import { METRICS, MOODS, meetsGoal, dayChecklist, perfectStreak, flameChecker, weekTraining, weightRequired, lastValueBefore } from '../core/metrics.js';
 import { navigate } from '../core/router.js';
 import { fmtNum, fmtClock, fmtSleep, parseNum } from '../core/format.js';
 import { debounce } from '../core/util.js';
 import { toast } from '../core/ui.js';
 import { haptic } from '../core/feedback.js';
 import { dayRings } from '../components/ring.js';
+import { openCalendar } from '../components/calendar.js';
+import { openSideMenu } from '../components/side-menu.js';
 
 export const QUALITY_LABELS = ['', 'Très mauvaise', 'Mauvaise', 'Moyenne', 'Bonne', 'Excellente'];
 
@@ -76,16 +78,25 @@ export default function home(root, dateParam) {
 
   // --- En-tête : date centrée ---
   const goDay = (k) => navigate(k >= today ? '/' : `/day/${k}`, { replace: true });
+  const showCalendar = () => {
+    const sessionDays = new Map();
+    for (const s of doneSessions()) {
+      const k = dateKey(new Date(s.startedAt));
+      const cur = sessionDays.get(k) || { count: 0, color: null };
+      cur.count++;
+      cur.color ||= sessionColor(s);
+      sessionDays.set(k, cur);
+    }
+    openCalendar({ selected: date, today, isFlame: flameChecker(state.days, today, streakOpts()), sessionDays, onPick: goDay });
+  };
   const header = h('header', { class: 'topbar home-top' },
-    h('div', { class: 'top-left' },
-      iconButton('history', 'Historique', () => navigate('/history'), 'glass-btn'),
-      iconButton('trophy', 'Objectifs', () => navigate('/goals'), 'glass-btn')),
+    h('div', { class: 'top-left' }, iconButton('menu', 'Menu', openSideMenu, 'glass-btn')),
     h('div', { class: 'daynav' },
       h('button', { class: 'icon-btn', 'aria-label': 'Jour précédent', onClick: () => goDay(addDays(date, -1)) }, icon('back', 18)),
-      h('button', { class: 'day-label', 'aria-label': isToday ? 'Aujourd’hui' : 'Revenir à aujourd’hui', onClick: () => !isToday && goDay(today) },
-        isToday ? 'Aujourd’hui' : formatLong(date)),
+      h('button', { class: 'day-label', 'aria-label': `${isToday ? 'Aujourd’hui' : formatLong(date)} : ouvrir le calendrier`, onClick: showCalendar },
+        h('span', null, isToday ? 'Aujourd’hui' : formatLong(date)), icon('down', 14, 'day-caret')),
       h('button', { class: 'icon-btn', 'aria-label': 'Jour suivant', disabled: isToday, onClick: () => goDay(addDays(date, 1)) }, icon('chevron', 18))),
-    h('div', { class: 'top-right' }, iconButton('sliders', 'Réglages', () => navigate('/settings'), 'glass-btn')));
+    h('div', { class: 'top-right' }));
 
   // --- Salutation, message et anneau du jour (flamme au centre) ---
   const message = h('p', { class: 'greet-msg' });

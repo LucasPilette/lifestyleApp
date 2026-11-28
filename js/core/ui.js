@@ -37,6 +37,64 @@ export function sheet(build, { title, onClose, cls = '', style } = {}) {
   return close;
 }
 
+/**
+ * Tiroir latéral gauche (menu). Se ferme au toucher du fond, en glissant vers la gauche, ou à la navigation.
+ * @param {(close: Function) => Node|Node[]} build contenu
+ */
+export function drawer(build, { label = 'Menu' } = {}) {
+  let closed = false;
+  const backdrop = h('div', { class: 'drawer-backdrop', onClick: () => close() });
+  const panel = h('nav', { class: 'drawer', role: 'dialog', 'aria-modal': 'true', 'aria-label': label });
+  const wrap = h('div', { class: 'drawer-wrap' }, backdrop, panel);
+
+  function close() {
+    if (closed) return;
+    closed = true;
+    panel.style.transform = '';
+    wrap.classList.remove('open');
+    openSheets.splice(openSheets.indexOf(close), 1);
+    setTimeout(() => wrap.remove(), 280);
+  }
+
+  // Glisser vers la gauche pour fermer
+  let x0 = null;
+  let y0 = 0;
+  let dx = 0;
+  let horizontal = null;
+  panel.addEventListener('touchstart', (e) => {
+    x0 = e.touches[0].clientX;
+    y0 = e.touches[0].clientY;
+    dx = 0;
+    horizontal = null;
+  }, { passive: true });
+  panel.addEventListener('touchmove', (e) => {
+    if (x0 == null) return;
+    const mx = e.touches[0].clientX - x0;
+    const my = e.touches[0].clientY - y0;
+    if (horizontal == null && (Math.abs(mx) > 8 || Math.abs(my) > 8)) horizontal = Math.abs(mx) > Math.abs(my);
+    if (!horizontal) return;
+    dx = Math.min(0, mx);
+    panel.style.transition = 'none';
+    panel.style.transform = `translateX(${dx}px)`;
+  }, { passive: true });
+  const end = () => {
+    if (horizontal) {
+      panel.style.transition = '';
+      if (dx < -70) close();
+      else panel.style.transform = '';
+    }
+    x0 = null;
+  };
+  panel.addEventListener('touchend', end);
+  panel.addEventListener('touchcancel', end);
+
+  panel.append(...[build(close)].flat());
+  overlays().append(wrap);
+  openSheets.push(close);
+  requestAnimationFrame(() => requestAnimationFrame(() => wrap.classList.add('open')));
+  return close;
+}
+
 export function closeAllSheets() {
   [...openSheets].forEach((c) => c());
 }

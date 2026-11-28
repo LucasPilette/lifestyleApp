@@ -8,7 +8,7 @@ import {
   e1rm, planGroup, warmupPlan, createSession, nextPending, restAfter, lastPerformance,
   propagateWeight, pruneSession, normalizeWarmups, sessionStats, sessionRecords, suggestTemplate, exerciseRecords,
 } from '../js/core/training.js';
-import { periodData, summary, streak, meetsGoal, rollingAvg, weightRequired, dayChecklist, perfectStreak, lastValueBefore, weekTraining } from '../js/core/metrics.js';
+import { periodData, summary, streak, meetsGoal, rollingAvg, weightRequired, dayChecklist, perfectStreak, lastValueBefore, weekTraining, flameChecker, dayEntries } from '../js/core/metrics.js';
 import { SEED_EXERCISES, seedTemplates } from '../js/data/seed.js';
 
 const exercises = new Map(SEED_EXERCISES.map((e) => [e.id, e]));
@@ -311,6 +311,20 @@ test('flamme : jours parfaits, éteinte par une semaine terminée à moins de 3 
   // un jour incomplet casse la série
   days.set('2026-11-25', { mood: 3 });
   assert.equal(perfectStreak(days, today, { sessionDates: prevWeek3, minSessions: 3 }), 1);
+});
+
+test('calendrier : jours avec flamme et données saisies', () => {
+  const today = '2026-11-27';
+  const days = new Map();
+  for (let i = 0; i < 12; i++) days.set(addDays(today, -i), full());
+  days.set('2026-11-25', { mood: 3 });
+  const lit = flameChecker(days, today, { sessionDates: ['2026-11-16', '2026-11-18'], minSessions: 3 });
+  assert.equal(lit('2026-11-26'), true);
+  assert.equal(lit('2026-11-25'), false); // incomplet
+  assert.equal(lit('2026-11-18'), false); // semaine à 2 séances : flamme éteinte
+  assert.equal(lit('2026-11-28'), false); // futur
+  assert.deepEqual(dayEntries({ mood: 3, kcal: 2000 }), { sleep: false, mood: true, weight: false, nutrition: true, steps: false });
+  assert.deepEqual(dayEntries(undefined), { sleep: false, mood: false, weight: false, nutrition: false, steps: false });
 });
 
 test('semaine d’entraînement : séances restantes et jours restants', () => {

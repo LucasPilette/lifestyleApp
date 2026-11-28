@@ -87,7 +87,8 @@ const ICONS = {
   list: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
   scale: 'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM7.5 10a4.5 4.5 0 0 1 9 0zM12 10l1.5-2.5',
   crown: 'M3 7.5l4.5 4L12 4.5l4.5 7 4.5-4L19 18H5L3 7.5zM5 21h14',
-  smile: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01',
+  menu: 'M4 7h16M4 12h16M4 17h10',
+  smile:'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01',
 };
 
 export function icon(name, size = 22, extraClass = '') {
@@ -115,9 +116,43 @@ export function iconButton(name, label, onClick, cls = '') {
   return h('button', { class: `icon-btn ${cls}`, type: 'button', 'aria-label': label, title: label, onClick }, icon(name));
 }
 
-/** Champ numérique optimisé iOS (clavier numérique, pas de zoom). */
+/**
+ * iOS « Secouer pour annuler » : chaque frappe native s'empile dans l'historique d'annulation, et le moindre
+ * mouvement du téléphone (pendant une série…) affiche « Annuler la saisie ? ». On applique donc nous-mêmes
+ * les frappes simples (chiffres, virgule, effacement) : une valeur posée par script n'entre pas dans cet
+ * historique. Les cas inhabituels (coller, dictée…) gardent le comportement natif.
+ */
+function noUndoTyping(e) {
+  const el = e.target;
+  const t = e.inputType;
+  if (t === 'historyUndo' || t === 'historyRedo') {
+    e.preventDefault();
+    return;
+  }
+  if (!e.cancelable || !['insertText', 'deleteContentBackward', 'deleteContentForward'].includes(t)) return;
+  if (t === 'insertText' && e.data == null) return;
+  const v = el.value;
+  let a = el.selectionStart ?? v.length;
+  let b = el.selectionEnd ?? v.length;
+  if (a === b) {
+    if (t === 'deleteContentBackward') a = Math.max(0, a - 1);
+    else if (t === 'deleteContentForward') b = Math.min(v.length, b + 1);
+  }
+  const ins = t === 'insertText' ? e.data : '';
+  const next = v.slice(0, a) + ins + v.slice(b);
+  e.preventDefault();
+  if (el.maxLength > 0 && next.length > el.maxLength && ins) return;
+  if (next === v) return;
+  el.value = next;
+  const pos = a + ins.length;
+  el.setSelectionRange(pos, pos);
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+/** Champ numérique optimisé iOS (clavier numérique, pas de zoom, pas de « Annuler la saisie ? »). */
 export function numInput({ value, placeholder = '', decimal = false, cls = '', label, onInput, onChange, maxLength }) {
   return h('input', {
+    onBeforeinput: noUndoTyping,
     class: `num-input ${cls}`,
     type: 'text',
     inputmode: decimal ? 'decimal' : 'numeric',

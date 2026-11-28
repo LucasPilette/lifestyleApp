@@ -101,20 +101,42 @@ export function weekTraining(sessionDates, today, minSessions = 3) {
  * Une semaine terminée avec moins de `minSessions` séances éteint la flamme : la série ne remonte pas au-delà.
  * La semaine en cours n'est jamais pénalisée, ni celles jusqu'à `graceUntil` (début d'utilisation de l'app).
  */
-export function perfectStreak(days, today, { sessionDates = [], minSessions = 3, graceUntil = null } = {}) {
-  const counts = weekSessionCounts(sessionDates);
-  const curWeek = weekStart(today);
-  const graceWeek = graceUntil ? weekStart(graceUntil) : null;
+export function perfectStreak(days, today, opts = {}) {
+  const isFlame = flameChecker(days, today, opts);
   let k = dayChecklist(days, today).perfect ? today : addDays(today, -1);
   let n = 0;
-  while (n < 3650) {
-    const ws = weekStart(k);
-    const weekFailed = ws < curWeek && !(graceWeek && ws <= graceWeek) && (counts.get(ws) || 0) < minSessions;
-    if (weekFailed || !dayChecklist(days, k).perfect) break;
+  while (n < 3650 && isFlame(k)) {
     n++;
     k = addDays(k, -1);
   }
   return n;
+}
+
+/**
+ * Renvoie (key) => le jour a-t-il sa flamme ? Jour parfait, dans une semaine qui n'a pas éteint la flamme
+ * (mêmes règles que perfectStreak). Sert au calendrier.
+ */
+export function flameChecker(days, today, { sessionDates = [], minSessions = 3, graceUntil = null } = {}) {
+  const counts = weekSessionCounts(sessionDates);
+  const curWeek = weekStart(today);
+  const graceWeek = graceUntil ? weekStart(graceUntil) : null;
+  return (key) => {
+    if (key > today) return false;
+    const ws = weekStart(key);
+    const weekFailed = ws < curWeek && !(graceWeek && ws <= graceWeek) && (counts.get(ws) || 0) < minSessions;
+    return !weekFailed && dayChecklist(days, key).perfect;
+  };
+}
+
+/** Données saisies un jour donné, dans l'ordre des rubriques de l'accueil. */
+export function dayEntries(d = {}) {
+  return {
+    sleep: d.sleepMin != null || d.sleepQ != null,
+    mood: d.mood != null,
+    weight: d.weight != null,
+    nutrition: d.kcal != null || d.prot != null,
+    steps: d.steps != null,
+  };
 }
 
 /** Objectif atteint ? 'min' = au moins l'objectif ; 'target' = à ±10 %. */
