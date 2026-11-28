@@ -72,6 +72,13 @@ create table if not exists public.messages (
 );
 create index if not exists messages_pair on public.messages (sender, recipient, id);
 create index if not exists messages_unread on public.messages (recipient) where read_at is null;
+-- Cartes partagées (payload : flamme, objectif, record, séance, valeur du jour ; body = texte de repli),
+-- réactions { "<id utilisateur>": "🔥" }, et updated_at pour récupérer réactions et « lu » en direct.
+alter table public.messages add column if not exists payload jsonb
+  check (payload is null or (jsonb_typeof(payload) = 'object' and pg_column_size(payload) < 2048));
+alter table public.messages add column if not exists reactions jsonb not null default '{}'::jsonb;
+alter table public.messages add column if not exists updated_at timestamptz not null default now();
+create index if not exists messages_updated on public.messages (updated_at);
 alter table public.messages enable row level security;
 drop policy if exists "messages : lecture des siens" on public.messages;
 create policy "messages : lecture des siens" on public.messages for select to authenticated
@@ -81,7 +88,7 @@ create policy "messages : envoi entre amis" on public.messages for insert to aut
   with check (sender = auth.uid() and public.are_friends(sender, recipient));
 revoke all on public.messages from anon, authenticated;
 grant select on public.messages to authenticated;
-grant insert (recipient, body) on public.messages to authenticated;
+grant insert (recipient, body, payload) on public.messages to authenticated;
 
 -- --- Fonctions appelées par l'app ---------------------------------------------
 
@@ -185,31 +192,50 @@ language sql stable security definer set search_path = public as $$
   ) x;
 $$;
 
--- Messages échangés avec un ami (les 200 derniers, ou ceux après p_after).
-create or replace function public.conversation(p_other uuid, p_after bigint default 0) returns json
+-- Messages échangés avec un ami : les 200 derniers, ou les nouveaux (id > p_after)
+-- et ceux modifiés depuis p_since (réactions, lu).
+drop function if exists public.conversation(uuid, bigint);
+create or replace function public.conversation(p_other uuid, p_after bigint default 0, p_since timestamptz default null) returns json
 language sql stable security invoker set search_path = public as $$
   select coalesce(json_agg(m order by m.id), '[]'::json) from (
-    select id, sender, recipient, body, created_at, read_at from messages
+    select id, sender, recipient, body, payload, reactions, created_at, read_at, updated_at from messages
     where ((sender = auth.uid() and recipient = p_other) or (sender = p_other and recipient = auth.uid()))
-      and id > coalesce(p_after, 0)
+      and (id > coalesce(p_after, 0) or (p_since is not null and updated_at > p_since))
     order by id desc limit 200
   ) m;
 $$;
 
--- Marquer comme lus les messages reçus d'un ami.
+-- Marquer comme lus les messages reçus d'un ami (l'expéditeur voit « Lu » apparaître).
 create or replace function public.mark_read(p_other uuid) returns json
 language sql security definer set search_path = public as $$
-  update messages set read_at = now() where recipient = auth.uid() and sender = p_other and read_at is null;
+  update messages set read_at = now(), updated_at = now() where recipient = auth.uid() and sender = p_other and read_at is null;
   select json_build_object('ok', true);
 $$;
+
+-- Réagir à un message (le même émoji retire la réaction).
+create or replace function public.react_message(p_id bigint, p_emoji text) returns json
+language plpgsql security definer set search_path = public as $$
+declare
+  me text := auth.uid()::text;
+  result jsonb;
+begin
+  if p_emoji is not null and (char_length(p_emoji) = 0 or char_length(p_emoji) > 16) then raise exception 'Réaction invalide.'; end if;
+  update messages set
+    reactions = case when p_emoji is null or reactions ->> me = p_emoji then reactions - me else reactions || jsonb_build_object(me, p_emoji) end,
+    updated_at = now()
+  where id = p_id and auth.uid() in (sender, recipient) and are_friends(sender, recipient)
+  returning reactions into result;
+  if result is null then raise exception 'Message introuvable.'; end if;
+  return result::json;
+end $$;
 
 -- Droits d'exécution : uniquement les utilisateurs connectés (comptes anonymes compris).
 revoke execute on function public.are_friends(uuid, uuid), public.ensure_profile(text), public.request_friend(text),
   public.respond_friend(uuid, boolean), public.remove_friend(uuid), public.my_friends(),
-  public.conversation(uuid, bigint), public.mark_read(uuid) from public, anon;
+  public.conversation(uuid, bigint, timestamptz), public.mark_read(uuid), public.react_message(bigint, text) from public, anon;
 grant execute on function public.are_friends(uuid, uuid), public.ensure_profile(text), public.request_friend(text),
   public.respond_friend(uuid, boolean), public.remove_friend(uuid), public.my_friends(),
-  public.conversation(uuid, bigint), public.mark_read(uuid) to authenticated;
+  public.conversation(uuid, bigint, timestamptz), public.mark_read(uuid), public.react_message(bigint, text) to authenticated;
 
 -- --- Notifications push ---------------------------------------------------------
 -- Les envois passent par la fonction Edge « push » (supabase/functions/push), avec la clé service.

@@ -74,14 +74,42 @@ export async function respondFriend(id, accept) {
 }
 export const removeFriend = (id) => rpc('remove_friend', { p_other: id });
 
-export async function conversation(id, after = 0) {
+// Le serveur peut ne pas encore avoir les cartes et réactions (script SQL pas relancé) : on se rabat alors
+// sur la version précédente (texte seul) au lieu de casser la discussion.
+let richChat = true;
+const isOldSchema = (e) => e?.code === 'PGRST202' || e?.code === 'PGRST204' || e?.code === '42703' || /payload|p_since/.test(e?.message || '');
+
+/** Messages nouveaux (id > after) et modifiés depuis since (réactions, lu). */
+export async function conversation(id, after = 0, since = null) {
+  if (richChat) {
+    try {
+      return (await rpc('conversation', { p_other: id, p_after: after, p_since: since })) || [];
+    } catch (e) {
+      if (!isOldSchema(e)) throw e;
+      richChat = false;
+    }
+  }
   return (await rpc('conversation', { p_other: id, p_after: after })) || [];
 }
 
-export async function sendMessage(id, body) {
-  const rows = await rest('messages', { method: 'POST', body: { recipient: id, body }, prefer: 'return=representation' });
+/** Envoie un message ; payload = carte partagée (body reste le texte de repli). */
+export async function sendMessage(id, body, payload = null) {
+  let rows;
+  try {
+    rows = await rest('messages', { method: 'POST', body: { recipient: id, body, ...(payload && richChat ? { payload } : {}) }, prefer: 'return=representation' });
+  } catch (e) {
+    if (!payload || !isOldSchema(e)) throw e;
+    richChat = false;
+    rows = await rest('messages', { method: 'POST', body: { recipient: id, body }, prefer: 'return=representation' });
+  }
   notify('message', id);
   return rows?.[0];
+}
+
+/** Réagit à un message (même émoji = retirer). Renvoie les réactions à jour. */
+export async function react(messageId, emoji) {
+  if (!richChat) throw new Error('Les réactions arrivent avec la prochaine mise à jour du serveur.');
+  return rpc('react_message', { p_id: messageId, p_emoji: emoji });
 }
 
 export const markRead = (id) => rpc('mark_read', { p_other: id }).catch(() => {});

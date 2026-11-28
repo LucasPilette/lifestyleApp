@@ -10,6 +10,7 @@ import { parseFriendCode } from '../core/prefs.js';
 import { haptic } from '../core/feedback.js';
 import { friendCodeCard } from './profile.js';
 import { helpOnce } from '../components/tour.js';
+import { openShareSheet, renderCard } from '../components/share-sheet.js';
 import * as social from '../core/social.js';
 
 const friendCache = new Map(); // id -> ami (pour afficher le nom tout de suite dans la discussion)
@@ -163,18 +164,37 @@ export function friendsView(root) {
   return () => document.removeEventListener('visibilitychange', onVis);
 }
 
+const QUICK_EMOJIS = ['🔥', '💪', '👏', '😂', '❤️', '🙌', '😮', '🎉', '🙏', '😴', '🥗', '🏋️', '👟', '💧', '😅', '🤝', '✅', '🚀'];
+const REACTIONS = ['❤️', '🔥', '💪', '👏', '😂', '😮'];
+
+/** Statut partagé d'un ami, pour l'en-tête de la discussion. */
+function friendStatus(f) {
+  if (!f) return '';
+  const today = todayKey();
+  const parts = [];
+  if (f.perfect_date === today && f.streak) parts.push(`🔥 ${f.streak} jour${f.streak > 1 ? 's' : ''} de flamme`);
+  if (f.mood != null && f.mood_date === today) parts.push(`${MOODS[f.mood].emoji} ${MOODS[f.mood].label.toLowerCase()}`);
+  return parts.join(' · ');
+}
+
 export function chatView(root, friendId) {
   const f = friendCache.get(friendId);
   const titleEl = h('h1', null, f?.name || 'Discussion');
+  const subEl = h('div', { class: 'topbar-sub chat-status' }, friendStatus(f));
   const list = h('div', { class: 'chat-list', role: 'log', 'aria-live': 'polite' }, h('div', { class: 'empty faint' }, 'Chargement…'));
   const input = h('textarea', { class: 'text-input chat-input', rows: 1, maxlength: 1000, placeholder: 'Message', 'aria-label': 'Message' });
-  const sendBtn = h('button', { class: 'chat-send', 'aria-label': 'Envoyer', onClick: send }, icon('send', 20));
-  const bar = h('div', { class: 'chat-bar' }, input, sendBtn);
+  const sendBtn = h('button', { class: 'chat-send', 'aria-label': 'Envoyer', onClick: () => send() }, icon('send', 20));
+  const emojiBtn = h('button', { class: 'chat-tool', 'aria-label': 'Émojis', onClick: () => toggleEmojis() }, h('span', { class: 'chat-tool-emoji' }, '😊'));
+  const shareBtn = h('button', { class: 'chat-tool', 'aria-label': 'Partager une carte', onClick: () => openShareSheet((c) => send(c)) }, icon('plus', 22));
+  const emojiRow = h('div', { class: 'chat-emojis hidden' }, QUICK_EMOJIS.map((e) => h('button', { class: 'chat-emoji', onClick: () => insertEmoji(e) }, e)));
+  const bar = h('div', { class: 'chat-bar' }, emojiRow, h('div', { class: 'chat-bar-row' }, shareBtn, emojiBtn, input, sendBtn));
   let messages = [];
   let lastId = 0;
+  let since = null;
   let me = null;
   let timer;
   let sending = false;
+  let reactingId = null;
 
   const autosize = () => {
     input.style.height = 'auto';
@@ -182,12 +202,40 @@ export function chatView(root, friendId) {
   };
   input.addEventListener('input', autosize);
 
+  function toggleEmojis(force) {
+    const show = force ?? emojiRow.classList.contains('hidden');
+    emojiRow.classList.toggle('hidden', !show);
+    emojiBtn.classList.toggle('on', show);
+  }
+  function insertEmoji(e) {
+    const a = input.selectionStart ?? input.value.length;
+    const b = input.selectionEnd ?? input.value.length;
+    input.value = input.value.slice(0, a) + e + input.value.slice(b);
+    input.setSelectionRange(a + e.length, a + e.length);
+    haptic();
+    autosize();
+  }
+
   const atBottom = () => window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 80;
   const toBottom = () => requestAnimationFrame(() => window.scrollTo(0, document.documentElement.scrollHeight));
 
+  /** Réactions groupées sous une bulle (les miennes en évidence). */
+  function reactionChips(m) {
+    const counts = new Map();
+    for (const [uid, e] of Object.entries(m.reactions || {})) {
+      const c = counts.get(e) || { n: 0, mine: false };
+      c.n++;
+      if (uid === me) c.mine = true;
+      counts.set(e, c);
+    }
+    if (!counts.size) return null;
+    return h('div', { class: 'reactions' }, [...counts].map(([e, c]) =>
+      h('button', { class: `reaction ${c.mine ? 'mine' : ''}`, onClick: () => react(m, e) }, e, c.n > 1 ? h('span', null, c.n) : null)));
+  }
+
   function renderMessages() {
     if (!messages.length) {
-      list.replaceChildren(h('div', { class: 'empty faint' }, 'Aucun message. Lance la conversation 👋'));
+      list.replaceChildren(h('div', { class: 'empty faint' }, 'Aucun message. Lance la conversation 👋 ou partage ta flamme avec le bouton +.'));
       return;
     }
     const nodes = [];
@@ -199,55 +247,111 @@ export function chatView(root, friendId) {
         lastDay = day;
       }
       const mine = m.sender === me;
-      nodes.push(h('div', { class: `bubble ${mine ? 'mine' : 'theirs'} ${m.pending ? 'pending' : ''}` },
-        h('div', { class: 'bubble-body' }, m.body),
-        h('div', { class: 'bubble-time' }, formatTime(new Date(m.created_at).getTime()), mine && m.read_at ? ' · Lu' : '')));
+      const card = m.payload ? renderCard(m.payload) : null;
+      const bubble = h('div', {
+        class: `bubble ${mine ? 'mine' : 'theirs'} ${card ? 'has-card' : ''} ${m.pending ? 'pending' : ''}`,
+        onClick: () => {
+          if (m.pending || typeof m.id !== 'number') return;
+          reactingId = reactingId === m.id ? null : m.id;
+          renderMessages();
+        },
+      },
+        card || h('div', { class: 'bubble-body' }, m.body),
+        h('div', { class: 'bubble-time' }, formatTime(new Date(m.created_at).getTime()), mine && m.read_at ? ' · Lu' : ''));
+      nodes.push(h('div', { class: `bubble-wrap ${mine ? 'mine' : 'theirs'}` },
+        bubble,
+        reactingId === m.id
+          ? h('div', { class: 'reaction-picker' }, REACTIONS.map((e) => h('button', { 'aria-label': `Réagir ${e}`, onClick: (ev) => { ev.stopPropagation(); react(m, e); } }, e)))
+          : null,
+        reactionChips(m)));
     }
     list.replaceChildren(...nodes);
   }
 
+  /** Fusionne les messages reçus (nouveaux ou modifiés : réactions, lu). */
+  function merge(rows) {
+    const byId = new Map(messages.filter((m) => !m.pending).map((m) => [m.id, m]));
+    for (const r of rows) byId.set(r.id, r);
+    const pend = messages.filter((m) => m.pending);
+    messages = [...[...byId.values()].sort((a, b) => a.id - b.id), ...pend];
+    for (const r of rows) {
+      if (r.id > lastId) lastId = r.id;
+      if (r.updated_at && (!since || r.updated_at > since)) since = r.updated_at;
+    }
+  }
+
   async function poll(initial = false) {
     try {
-      const fresh = await social.conversation(friendId, initial ? 0 : lastId);
+      const fresh = await social.conversation(friendId, initial ? 0 : lastId, initial ? null : since);
       me = social.myId();
-      if (initial) messages = fresh;
-      else if (fresh.length) messages = [...messages.filter((m) => !m.pending), ...fresh];
-      if (fresh.length) lastId = fresh[fresh.length - 1].id;
+      const hadNew = fresh.some((r) => r.id > lastId);
+      if (initial) {
+        messages = [];
+        lastId = 0;
+      }
+      merge(fresh);
       const stick = initial || atBottom();
       if (initial || fresh.length) renderMessages();
-      if (stick && (initial || fresh.length)) toBottom();
+      if (stick && (initial || hadNew)) toBottom();
       if (fresh.some((m) => m.sender !== me && !m.read_at)) social.markRead(friendId);
     } catch (e) {
       if (initial) list.replaceChildren(errorBox(e, () => poll(true)));
     }
   }
 
-  async function send() {
-    const body = input.value.trim();
+  /** Envoie le texte saisi, ou une carte ({ payload, body }). */
+  async function send(card = null) {
+    const body = card ? card.body : input.value.trim();
     if (!body || sending) return;
     sending = true;
-    const temp = { id: `t${Date.now()}`, sender: me, body, created_at: new Date().toISOString(), pending: true };
+    const temp = { id: `t${Date.now()}`, sender: me, body, payload: card?.payload || null, created_at: new Date().toISOString(), pending: true };
     messages = [...messages, temp];
     renderMessages();
     toBottom();
-    input.value = '';
-    autosize();
+    if (!card) {
+      input.value = '';
+      autosize();
+    }
     try {
-      await social.sendMessage(friendId, body);
+      const row = await social.sendMessage(friendId, body, card?.payload || null);
+      messages = messages.filter((m) => m !== temp);
+      if (row?.id) merge([row]);
+      renderMessages();
+      haptic();
       await poll();
     } catch (e) {
       messages = messages.filter((m) => m !== temp);
       renderMessages();
-      input.value = body;
-      autosize();
+      if (!card) {
+        input.value = body;
+        autosize();
+      }
       toast(e.message || 'Message non envoyé', { duration: 3500 });
     } finally {
       sending = false;
     }
   }
 
+  async function react(m, emoji) {
+    const prev = m.reactions || {};
+    const next = { ...prev };
+    if (next[me] === emoji) delete next[me];
+    else next[me] = emoji;
+    m.reactions = next;
+    reactingId = null;
+    haptic();
+    renderMessages();
+    try {
+      m.reactions = (await social.react(m.id, emoji)) || next;
+    } catch (e) {
+      m.reactions = prev;
+      toast(e.message || 'Réaction impossible');
+    }
+    renderMessages();
+  }
+
   async function menu() {
-    const choice = await actionSheet(f?.name || 'Ami', [{ id: 'remove', label: 'Retirer de mes amis', icon: 'trash', danger: true }]);
+    const choice = await actionSheet(friendCache.get(friendId)?.name || 'Ami', [{ id: 'remove', label: 'Retirer de mes amis', icon: 'trash', danger: true }]);
     if (choice !== 'remove') return;
     if (!(await confirmSheet({ title: 'Retirer cet ami ?', message: 'Vous ne pourrez plus vous écrire, sauf en vous ajoutant à nouveau.', confirmLabel: 'Retirer', danger: true }))) return;
     try {
@@ -268,24 +372,26 @@ export function chatView(root, friendId) {
   };
   vv?.addEventListener('resize', onViewport);
   vv?.addEventListener('scroll', onViewport);
+  input.addEventListener('focus', () => toggleEmojis(false));
 
   const onVis = () => document.visibilityState === 'visible' && poll();
   document.addEventListener('visibilitychange', onVis);
   timer = setInterval(() => document.visibilityState === 'visible' && poll(), 4000);
 
-  // Nom de l'ami si on arrive directement sur la discussion
-  if (!f) social.listFriends().then((l) => {
+  // Nom et statut de l'ami (à jour, même en arrivant directement sur la discussion)
+  social.listFriends().then((l) => {
     const x = l.find((y) => y.id === friendId);
-    if (x) {
-      friendCache.set(x.id, x);
-      titleEl.textContent = x.name || 'Discussion';
-    }
+    if (!x) return;
+    friendCache.set(x.id, x);
+    titleEl.textContent = x.name || 'Discussion';
+    subEl.textContent = friendStatus(x);
   }).catch(() => {});
 
   const header = pageHeader({ title: '', onBack: () => back('/friends'), actions: [h('button', { class: 'icon-btn', 'aria-label': 'Options', onClick: menu }, icon('more'))] });
-  header.querySelector('.topbar-title').replaceChildren(titleEl);
+  header.querySelector('.topbar-title').replaceChildren(titleEl, subEl);
   root.append(h('div', { class: 'view chat-view' }, header, h('div', { class: 'page' }, list)), bar);
   poll(true);
+  helpOnce('chat', { title: 'Discussion', iconName: 'message', text: ['Le bouton + partage une carte : ta flamme, un objectif atteint, un record, ta dernière séance ou une valeur du jour (pas, sommeil…).', 'Touche un message pour y réagir avec un émoji.'] });
 
   return () => {
     clearInterval(timer);

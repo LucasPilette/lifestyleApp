@@ -1668,3 +1668,71 @@ body::before {
 .pf-reminder .segmented { margin-top: 8px; }
 .pf-reminder { align-items: flex-start; }
 .pf-reminder .seg { font-size: 13px; }
+
+/* ==========================================================================
+   Discussion vivante : cartes partagées, émojis, réactions
+   ========================================================================== */
+.chat-bar { flex-direction: column; align-items: stretch; gap: 8px; }
+.chat-bar-row { display: flex; align-items: flex-end; gap: 6px; }
+.chat-tool {
+  flex: none; width: 40px; height: 44px; border-radius: 14px; display: grid; place-items: center; color: var(--text-2);
+}
+.chat-tool:active, .chat-tool.on { background: rgb(var(--hi) / 0.08); color: var(--text); }
+.chat-tool-emoji { font-size: 22px; line-height: 1; }
+.chat-emojis { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; padding: 2px 0; }
+.chat-emojis::-webkit-scrollbar { display: none; }
+.chat-emoji { flex: none; width: 42px; height: 42px; border-radius: 12px; font-size: 24px; }
+.chat-emoji:active { background: rgb(var(--hi) / 0.1); transform: scale(0.92); }
+.chat-status { color: var(--text-2); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-status:empty { display: none; }
+
+.bubble-wrap { display: flex; flex-direction: column; gap: 4px; }
+.bubble-wrap.mine { align-items: flex-end; }
+.bubble-wrap.theirs { align-items: flex-start; }
+.bubble { cursor: pointer; -webkit-user-select: none; user-select: none; }
+.bubble.has-card { padding: 6px 6px 5px; max-width: 86%; }
+.bubble.has-card .bubble-time { padding: 0 6px; }
+
+/* Carte partagée */
+.chat-card {
+  --cc: var(--accent);
+  display: flex; align-items: center; gap: 12px; min-width: 220px; padding: 12px 14px 12px 12px; border-radius: 16px; text-align: left;
+  color: var(--text-hi);
+  background: linear-gradient(140deg, color-mix(in srgb, var(--cc) 34%, var(--sheet-1)), color-mix(in srgb, var(--cc) 12%, var(--sheet-2)));
+  border: 1px solid color-mix(in srgb, var(--cc) 45%, transparent);
+  box-shadow: inset 0 1px 0 rgb(var(--hi) / 0.12);
+}
+.chat-card-emoji {
+  flex: none; width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; font-size: 28px;
+  background: color-mix(in srgb, var(--cc) 30%, rgb(var(--lo) / calc(0.25 * var(--lo-k))));
+}
+.chat-card-body { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+.chat-card-title { font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: color-mix(in srgb, var(--cc) 55%, var(--mix-hi)); }
+.chat-card-value { font-family: var(--font-round); font-size: 17px; font-weight: 800; line-height: 1.25; }
+.chat-card-sub { font-size: 12.5px; color: var(--text-2); }
+.chat-card.t-flame .chat-card-emoji { animation: flicker 1.8s ease-in-out infinite; }
+@keyframes flicker { 50% { transform: scale(1.08) rotate(-3deg); } }
+.chat-card.mini { min-width: 0; flex: 1; padding: 9px 10px 9px 9px; }
+.chat-card.mini .chat-card-emoji { width: 40px; height: 40px; font-size: 23px; }
+.chat-card.mini .chat-card-value { font-size: 15px; }
+.share-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 4px 0; text-align: left; }
+.share-item:active .chat-card { transform: scale(0.98); }
+
+/* Réactions */
+.reaction-picker {
+  display: flex; gap: 2px; padding: 4px; border-radius: 22px; background: var(--sheet-1); border: 1px solid rgb(var(--hi) / 0.12);
+  box-shadow: 0 8px 24px rgb(0 0 0 / calc(0.35 * var(--sh))); animation: pop 0.15s ease-out;
+}
+.reaction-picker button { width: 38px; height: 38px; border-radius: 50%; font-size: 22px; }
+.reaction-picker button:active { background: rgb(var(--hi) / 0.12); transform: scale(1.15); }
+@keyframes pop { from { transform: scale(0.85); opacity: 0; } }
+.reactions { display: flex; gap: 4px; flex-wrap: wrap; margin-top: -2px; }
+.reaction {
+  display: inline-flex; align-items: center; gap: 3px; height: 26px; padding: 0 8px; border-radius: 13px; font-size: 15px;
+  background: rgb(var(--hi) / 0.08); border: 1px solid rgb(var(--hi) / 0.1);
+}
+.reaction span { font-size: 12px; font-weight: 700; color: var(--text-2); }
+.reaction.mine { border-color: color-mix(in srgb, var(--accent) 60%, transparent); background: var(--accent-soft); }
+.bubble.has-card, .bubble.mine.has-card, .bubble.theirs.has-card { background: transparent; border: 0; padding: 0; box-shadow: none; color: var(--text); }
+.bubble.has-card .bubble-time { color: var(--text-3); opacity: 1; padding: 3px 4px 0; }
+.bubble.mine.has-card .chat-card { box-shadow: inset 0 1px 0 rgb(var(--hi) / 0.12), 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent); }

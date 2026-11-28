@@ -2,7 +2,7 @@
 // Le bloc ci-dessous est régénéré par `node tools/release.mjs` à chaque publication.
 
 // <generated>
-const VERSION = '2026.11.28-fae87f7';
+const VERSION = '2026.11.28-928754b';
 const ASSETS = [
   "./",
   "./css/app.css",
@@ -18,6 +18,7 @@ const ASSETS = [
   "./js/components/prefs-ui.js",
   "./js/components/ring.js",
   "./js/components/session-editor.js",
+  "./js/components/share-sheet.js",
   "./js/components/side-menu.js",
   "./js/components/tour.js",
   "./js/config.js",
@@ -32,6 +33,7 @@ const ASSETS = [
   "./js/core/program.js",
   "./js/core/push.js",
   "./js/core/router.js",
+  "./js/core/share.js",
   "./js/core/social.js",
   "./js/core/store.js",
   "./js/core/supabase.js",

@@ -584,3 +584,30 @@ test('objectifs sur widgets : moyenne, dernière valeur, régularité, propositi
   assert.deepEqual(keys, ['avg:mood', 'rate:mood', 'cavg:cw_eau', 'clast:cw_eau', 'rate:cw_eau', 'rate:cw_med']);
   assert.ok(!g.addableGoals(['mood'], custom).some((x) => x.key.includes('cw_')));
 });
+
+test('cartes partagées : flamme, record, valeurs du jour, nettoyage', async () => {
+  const sh = await import('../js/core/share.js');
+  assert.equal(sh.flameCard(12).payload.value, '12 jours d’affilée');
+  assert.equal(sh.flameCard(1).body, '🔥 Ma flamme : 1 jour d’affilée (et ça continue)');
+  assert.equal(sh.flameCard(0).payload.value, 'à rallumer aujourd’hui');
+  // Record : séance après une première séance de référence
+  const s1 = done('upper-a', new Date(2026, 10, 20, 18).getTime(), { bench: [[100, 5]] });
+  const s2 = done('upper-a', new Date(2026, 10, 24, 18).getTime(), { bench: [[105, 5]] });
+  const recs = sh.recentRecords([s2, s1], exercises, 80);
+  assert.equal(recs.length, 1);
+  const rc = sh.recordCard(recs[0], exercises.get('bench'), 'mardi');
+  assert.equal(rc.payload.value, 'Développé couché : 105 kg × 5');
+  assert.equal(rc.payload.sub, 'charge la plus lourde · mardi');
+  // Valeurs du jour, widgets intégrés et personnalisés
+  const water = { id: 'cw_eau', kind: 'number', name: 'Eau', unit: 'verres', emoji: '💧', color: '#22c3d6' };
+  const cards = sh.dayCards({ steps: 12340, mood: 5, custom: { cw_eau: 8 } }, ['sleep', 'mood', 'steps', 'cw_eau'], [water]);
+  const sp = (x) => x.replace(/\s/g, ' '); // espaces fines insécables du format français
+  assert.deepEqual(cards.map((c) => sp(c.payload.value)), ['Très bien', '12 340 pas', '8 verres']);
+  assert.equal(sp(cards[1].body), '👟 Mes pas : 12 340 pas');
+  // Carte reçue d'un autre téléphone : bornée et sans couleur douteuse
+  const dirty = sh.cleanCard({ type: 'hack', emoji: '😈', title: 'x'.repeat(100), value: 'v', color: 'red;background:url(x)' });
+  assert.equal(dirty.type, 'stat');
+  assert.equal(dirty.title.length, 40);
+  assert.equal(dirty.color, '');
+  assert.equal(sh.cleanCard(null), null);
+});
