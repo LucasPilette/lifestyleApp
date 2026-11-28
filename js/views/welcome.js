@@ -253,7 +253,7 @@ export default function welcomeView(root) {
     if (!prefill) updateSettings({ goalList: goalsFromWidgets(state.settings).goalList, objectives: goalsFromWidgets(state.settings).objectives });
     if ((d.avatar || null) !== (st.avatar || null)) setAvatar(d.avatar);
     await markOnboarded();
-    // Nouveau compte : 2 engrais offerts pour bien démarrer (visibles en haut à gauche de l'accueil).
+    // Nouveau compte : 2 engrais offerts pour bien démarrer (visibles en haut à droite de l'accueil).
     if (!prefill) await updateMeta({ starterFertilizer: 2 });
     if (isConfigured()) ensureProfile({ force: true }).catch(() => {});
     toast(prefill ? `Bienvenue ${d.name.trim()} !` : `Ta graine est plantée, ${d.name.trim()} 🌱 Cadeau : 2 engrais pour bien démarrer.`, { duration: 4500 });

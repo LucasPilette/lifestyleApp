@@ -75,7 +75,7 @@ export default function home(root, dateParam) {
 
   // --- En-tête : date centrée ---
   const goDay = (k) => navigate(k >= today ? '/' : `/day/${k}`, { replace: true });
-  // Réserve d'engrais (en haut à gauche) : toucher ouvre la plante
+  // Réserve d'engrais (en haut à droite) : toucher ouvre la plante
   const fertPill = h('button', { class: 'fert-pill glass-btn', onClick: () => showPlant() });
   const showCalendar = () => {
     const sessionDays = new Map();
@@ -90,13 +90,13 @@ export default function home(root, dateParam) {
     openCalendar({ selected: date, today, widgets, customs, isWatered: (k) => g.watered.has(k), isSaved: (k) => g.saved.has(k), sessionDays, onPick: goDay });
   };
   const header = h('header', { class: 'topbar home-top' },
-    h('div', { class: 'top-left' }, iconButton('menu', 'Menu', openSideMenu, 'glass-btn'), fertPill),
+    h('div', { class: 'top-left' }, iconButton('menu', 'Menu', openSideMenu, 'glass-btn')),
     h('div', { class: 'daynav' },
       h('button', { class: 'icon-btn', 'aria-label': 'Jour précédent', onClick: () => goDay(addDays(date, -1)) }, icon('back', 18)),
       h('button', { class: 'day-label', 'aria-label': `${isToday ? 'Aujourd’hui' : formatLong(date)} : ouvrir le calendrier`, onClick: showCalendar },
         h('span', null, isToday ? 'Aujourd’hui' : date === addDays(today, -1) ? 'Hier' : formatCompact(date)), icon('down', 14, 'day-caret')),
       h('button', { class: 'icon-btn', 'aria-label': 'Jour suivant', disabled: isToday, onClick: () => goDay(addDays(date, 1)) }, icon('chevron', 18))),
-    h('div', { class: 'top-right' }));
+    h('div', { class: 'top-right' }, fertPill));
 
   // --- Salutation, message et anneau du jour (la plante au centre) ---
   const message = h('p', { class: 'greet-msg' });
