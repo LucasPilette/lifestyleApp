@@ -94,6 +94,31 @@ export async function rest(path, { method = 'GET', body, prefer } = {}) {
   return call(`/rest/v1/${path}`, { method, body, token: await accessToken(), headers: prefer ? { Prefer: prefer } : {} });
 }
 
+/** Dépose un fichier dans Supabase Storage (remplace s'il existe). Renvoie l'adresse publique. */
+export async function uploadFile(bucket, path, blob, contentType) {
+  const token = await accessToken();
+  let res;
+  try {
+    res = await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`, {
+      method: 'POST',
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, 'Content-Type': contentType, 'x-upsert': 'true', 'cache-control': '3600' },
+      body: blob,
+    });
+  } catch {
+    throw new ServerError('Pas de connexion internet.', { code: 'offline' });
+  }
+  if (!res.ok) {
+    let msg = `Envoi impossible (${res.status})`;
+    try {
+      msg = (await res.json()).message || msg;
+    } catch {
+      /* réponse vide */
+    }
+    throw new ServerError(msg, { status: res.status });
+  }
+  return `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
+}
+
 /** Appel d'une fonction Edge (ex. « push »). */
 export async function invoke(fn, body = {}) {
   return call(`/functions/v1/${fn}`, { method: 'POST', body, token: await accessToken() });

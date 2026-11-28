@@ -23,6 +23,7 @@ create table if not exists public.profiles (
 -- Colonnes ajoutées après la première version (installations existantes)
 alter table public.profiles add column if not exists perfect_date date;
 alter table public.profiles add column if not exists streak int;
+alter table public.profiles add column if not exists avatar_url text check (avatar_url is null or char_length(avatar_url) <= 300);
 alter table public.profiles enable row level security;
 drop policy if exists "profil : lecture de soi" on public.profiles;
 create policy "profil : lecture de soi" on public.profiles for select to authenticated using (id = auth.uid());
@@ -32,7 +33,7 @@ create policy "profil : modification de soi" on public.profiles for update to au
 revoke all on public.profiles from anon, authenticated;
 grant select on public.profiles to authenticated;
 -- Le code ami n'est pas modifiable par l'app (créé par ensure_profile).
-grant update (name, share, mood, mood_date, last_workout_at, perfect_date, streak, updated_at) on public.profiles to authenticated;
+grant update (name, share, mood, mood_date, last_workout_at, perfect_date, streak, avatar_url, updated_at) on public.profiles to authenticated;
 
 -- --- Amitiés ------------------------------------------------------------------
 create table if not exists public.friendships (
@@ -61,6 +62,36 @@ language sql stable security definer set search_path = public as $$
   );
 $$;
 
+-- --- Groupes de discussion ------------------------------------------------------
+create table if not exists public.groups (
+  id uuid primary key default gen_random_uuid(),
+  name text not null check (char_length(btrim(name)) between 1 and 40),
+  created_by uuid not null references public.profiles (id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+create table if not exists public.group_members (
+  group_id uuid not null references public.groups (id) on delete cascade,
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  joined_at timestamptz not null default now(),
+  last_read_at timestamptz not null default now(),
+  primary key (group_id, user_id)
+);
+create index if not exists group_members_user on public.group_members (user_id);
+
+create or replace function public.is_member(g uuid, u uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from group_members where group_id = g and user_id = u);
+$$;
+
+alter table public.groups enable row level security;
+alter table public.group_members enable row level security;
+drop policy if exists "groupe : lecture par ses membres" on public.groups;
+create policy "groupe : lecture par ses membres" on public.groups for select to authenticated using (public.is_member(id, auth.uid()));
+drop policy if exists "membres : lecture par les membres" on public.group_members;
+create policy "membres : lecture par les membres" on public.group_members for select to authenticated using (public.is_member(group_id, auth.uid()));
+revoke all on public.groups, public.group_members from anon, authenticated;
+grant select on public.groups, public.group_members to authenticated;
+
 -- --- Messages -----------------------------------------------------------------
 create table if not exists public.messages (
   id bigint generated always as identity primary key,
@@ -79,16 +110,28 @@ alter table public.messages add column if not exists payload jsonb
 alter table public.messages add column if not exists reactions jsonb not null default '{}'::jsonb;
 alter table public.messages add column if not exists updated_at timestamptz not null default now();
 create index if not exists messages_updated on public.messages (updated_at);
+-- Message de groupe : group_id renseigné, recipient vide (l'un ou l'autre).
+alter table public.messages alter column recipient drop not null;
+alter table public.messages add column if not exists group_id uuid references public.groups (id) on delete cascade;
+create index if not exists messages_group on public.messages (group_id, id);
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'messages_target') then
+    alter table public.messages add constraint messages_target check ((recipient is null) <> (group_id is null));
+  end if;
+end $$;
 alter table public.messages enable row level security;
 drop policy if exists "messages : lecture des siens" on public.messages;
 create policy "messages : lecture des siens" on public.messages for select to authenticated
-  using (auth.uid() in (sender, recipient));
+  using (auth.uid() in (sender, recipient) or (group_id is not null and public.is_member(group_id, auth.uid())));
 drop policy if exists "messages : envoi entre amis" on public.messages;
 create policy "messages : envoi entre amis" on public.messages for insert to authenticated
-  with check (sender = auth.uid() and public.are_friends(sender, recipient));
+  with check (sender = auth.uid() and (
+    (group_id is null and recipient is not null and public.are_friends(sender, recipient))
+    or (group_id is not null and recipient is null and public.is_member(group_id, sender))
+  ));
 revoke all on public.messages from anon, authenticated;
 grant select on public.messages to authenticated;
-grant insert (recipient, body, payload) on public.messages to authenticated;
+grant insert (recipient, body, payload, group_id) on public.messages to authenticated;
 
 -- --- Fonctions appelées par l'app ---------------------------------------------
 
@@ -171,7 +214,7 @@ create or replace function public.my_friends() returns json
 language sql stable security definer set search_path = public as $$
   select coalesce(json_agg(x order by x.sort_at desc nulls last), '[]'::json) from (
     select
-      p.id, p.name, p.code, f.status,
+      p.id, p.name, p.code, p.avatar_url, f.status,
       case when f.requester = auth.uid() then 'out' else 'in' end as direction,
       case when f.status = 'accepted' and p.share then p.mood end as mood,
       case when f.status = 'accepted' and p.share then p.mood_date end as mood_date,
@@ -223,7 +266,10 @@ begin
   update messages set
     reactions = case when p_emoji is null or reactions ->> me = p_emoji then reactions - me else reactions || jsonb_build_object(me, p_emoji) end,
     updated_at = now()
-  where id = p_id and auth.uid() in (sender, recipient) and are_friends(sender, recipient)
+  where id = p_id and (
+    (group_id is null and auth.uid() in (sender, recipient) and are_friends(sender, recipient))
+    or (group_id is not null and is_member(group_id, auth.uid()))
+  )
   returning reactions into result;
   if result is null then raise exception 'Message introuvable.'; end if;
   return result::json;
@@ -319,6 +365,7 @@ declare
   v_ref text;
   m messages%rowtype;
   n int;
+  gname text;
 begin
   select * into s from profiles where id = p_sender;
   if not found then return null; end if;
@@ -331,6 +378,14 @@ begin
     if not found or m.created_at < now() - interval '5 minutes' then return null; end if;
     recipients := array[p_other];
     v_title := who; v_body := left(m.body, 160); v_url := './#/friends/' || p_sender; v_tag := 'msg-' || p_sender; v_ref := m.id::text;
+  elsif p_kind = 'group_message' then
+    if p_other is null or not is_member(p_other, p_sender) then return null; end if;
+    select * into m from messages where sender = p_sender and group_id = p_other order by id desc limit 1;
+    if not found or m.created_at < now() - interval '5 minutes' then return null; end if;
+    select name into gname from groups where id = p_other;
+    recipients := array(select user_id from group_members where group_id = p_other and user_id <> p_sender);
+    v_title := coalesce(gname, 'Groupe'); v_body := who || ' : ' || left(m.body, 150);
+    v_url := './#/groups/' || p_other; v_tag := 'grp-' || p_other; v_ref := m.id::text;
   elsif p_kind = 'friend_request' then
     if p_other is null or not exists (select 1 from friendships where requester = p_sender and addressee = p_other and status = 'pending') then return null; end if;
     recipients := array[p_other];
@@ -390,7 +445,7 @@ alter table public.profiles add column if not exists flame int;
 alter table public.profiles add column if not exists flame_date date;
 alter table public.profiles add column if not exists todo text check (char_length(todo) <= 200);
 alter table public.profiles add column if not exists todo_date date;
-grant update (name, share, mood, mood_date, last_workout_at, perfect_date, streak, tz, remind_hour, flame, flame_date, todo, todo_date, updated_at)
+grant update (name, share, mood, mood_date, last_workout_at, perfect_date, streak, avatar_url, tz, remind_hour, flame, flame_date, todo, todo_date, updated_at)
   on public.profiles to authenticated;
 
 -- Secret partagé entre la tâche planifiée et la fonction Edge (créé une seule fois).
@@ -479,3 +534,120 @@ begin
 end $$;
 revoke execute on function public.ai_take(uuid, int) from public, anon, authenticated;
 grant execute on function public.ai_take(uuid, int) to service_role;
+
+-- --- Groupes : fonctions appelées par l'app ---------------------------------------
+
+-- Créer un groupe avec des amis (le créateur en fait partie).
+create or replace function public.create_group(p_name text, p_members uuid[]) returns json
+language plpgsql security definer set search_path = public as $$
+declare
+  me uuid := auth.uid();
+  gname text := btrim(coalesce(p_name, ''));
+  valid uuid[];
+  g uuid;
+begin
+  if me is null or not exists (select 1 from profiles where id = me) then raise exception 'Profil introuvable, réessaie.'; end if;
+  if char_length(gname) not between 1 and 40 then raise exception 'Donne un nom au groupe (40 caractères au plus).'; end if;
+  valid := array(select distinct m from unnest(coalesce(p_members, '{}')) m where m <> me and are_friends(me, m));
+  if cardinality(valid) < 1 then raise exception 'Choisis au moins un ami.'; end if;
+  if cardinality(valid) > 29 then raise exception 'Trente membres au plus.'; end if;
+  insert into groups (name, created_by) values (gname, me) returning id into g;
+  insert into group_members (group_id, user_id) select g, u from unnest(array_append(valid, me)) u;
+  return json_build_object('id', g, 'name', gname);
+end $$;
+
+create or replace function public.rename_group(p_group uuid, p_name text) returns json
+language plpgsql security definer set search_path = public as $$
+declare
+  gname text := btrim(coalesce(p_name, ''));
+begin
+  if not is_member(p_group, auth.uid()) then raise exception 'Groupe introuvable.'; end if;
+  if char_length(gname) not between 1 and 40 then raise exception 'Donne un nom au groupe (40 caractères au plus).'; end if;
+  update groups set name = gname where id = p_group;
+  return json_build_object('id', p_group, 'name', gname);
+end $$;
+
+-- Ajouter des amis à un groupe dont on fait partie.
+create or replace function public.add_group_members(p_group uuid, p_members uuid[]) returns json
+language plpgsql security definer set search_path = public as $$
+declare
+  me uuid := auth.uid();
+  added int;
+begin
+  if not is_member(p_group, me) then raise exception 'Groupe introuvable.'; end if;
+  if (select count(*) from group_members where group_id = p_group) + cardinality(coalesce(p_members, '{}')) > 30 then raise exception 'Trente membres au plus.'; end if;
+  insert into group_members (group_id, user_id)
+    select p_group, m from unnest(coalesce(p_members, '{}')) m where are_friends(me, m)
+    on conflict do nothing;
+  get diagnostics added = row_count;
+  return json_build_object('added', added);
+end $$;
+
+-- Quitter un groupe (supprimé quand il n'a plus de membres).
+create or replace function public.leave_group(p_group uuid) returns json
+language plpgsql security definer set search_path = public as $$
+begin
+  delete from group_members where group_id = p_group and user_id = auth.uid();
+  delete from groups where id = p_group and not exists (select 1 from group_members where group_id = p_group);
+  return json_build_object('ok', true);
+end $$;
+
+-- Mes groupes : membres, dernier message, messages non lus.
+create or replace function public.my_groups() returns json
+language sql stable security definer set search_path = public as $$
+  select coalesce(json_agg(x order by x.sort_at desc), '[]'::json) from (
+    select g.id, g.name, g.created_by,
+      (select json_agg(json_build_object('id', p.id, 'name', p.name, 'avatar_url', p.avatar_url) order by gm2.joined_at)
+         from group_members gm2 join profiles p on p.id = gm2.user_id where gm2.group_id = g.id) as members,
+      (select count(*) from messages m where m.group_id = g.id and m.sender <> auth.uid() and m.created_at > gm.last_read_at)::int as unread,
+      lm.body as last_body, lm.created_at as last_at, lp.name as last_sender, (lm.sender = auth.uid()) as last_mine,
+      coalesce(lm.created_at, g.created_at) as sort_at
+    from group_members gm
+    join groups g on g.id = gm.group_id
+    left join lateral (select m.body, m.created_at, m.sender from messages m where m.group_id = g.id order by m.id desc limit 1) lm on true
+    left join profiles lp on lp.id = lm.sender
+    where gm.user_id = auth.uid()
+  ) x;
+$$;
+
+-- Messages d'un groupe : nouveaux (id > p_after) et modifiés depuis p_since.
+create or replace function public.group_conversation(p_group uuid, p_after bigint default 0, p_since timestamptz default null) returns json
+language sql stable security invoker set search_path = public as $$
+  select coalesce(json_agg(m order by m.id), '[]'::json) from (
+    select id, sender, group_id, body, payload, reactions, created_at, updated_at from messages
+    where group_id = p_group and (id > coalesce(p_after, 0) or (p_since is not null and updated_at > p_since))
+    order by id desc limit 200
+  ) m;
+$$;
+
+create or replace function public.mark_group_read(p_group uuid) returns json
+language sql security definer set search_path = public as $$
+  update group_members set last_read_at = now() where group_id = p_group and user_id = auth.uid();
+  select json_build_object('ok', true);
+$$;
+
+revoke execute on function public.is_member(uuid, uuid), public.create_group(text, uuid[]), public.rename_group(uuid, text),
+  public.add_group_members(uuid, uuid[]), public.leave_group(uuid), public.my_groups(),
+  public.group_conversation(uuid, bigint, timestamptz), public.mark_group_read(uuid) from public, anon;
+grant execute on function public.is_member(uuid, uuid), public.create_group(text, uuid[]), public.rename_group(uuid, text),
+  public.add_group_members(uuid, uuid[]), public.leave_group(uuid), public.my_groups(),
+  public.group_conversation(uuid, bigint, timestamptz), public.mark_group_read(uuid) to authenticated;
+
+-- --- Photos de profil (Supabase Storage, dossier public « avatars ») ---------------
+-- Chacun dépose sa photo dans « <son id>/avatar.jpg » ; lecture publique par l'adresse de la photo.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('avatars', 'avatars', true, 307200, array['image/jpeg', 'image/png', 'image/webp'])
+on conflict (id) do update set public = excluded.public, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+drop policy if exists "avatars : lecture de sa photo" on storage.objects;
+create policy "avatars : lecture de sa photo" on storage.objects for select to authenticated
+  using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+drop policy if exists "avatars : dépôt de sa photo" on storage.objects;
+create policy "avatars : dépôt de sa photo" on storage.objects for insert to authenticated
+  with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+drop policy if exists "avatars : remplacement de sa photo" on storage.objects;
+create policy "avatars : remplacement de sa photo" on storage.objects for update to authenticated
+  using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text)
+  with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+drop policy if exists "avatars : suppression de sa photo" on storage.objects;
+create policy "avatars : suppression de sa photo" on storage.objects for delete to authenticated
+  using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);

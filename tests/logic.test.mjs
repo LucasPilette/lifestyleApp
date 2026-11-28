@@ -611,3 +611,21 @@ test('cartes partagées : flamme, record, valeurs du jour, nettoyage', async () 
   assert.equal(dirty.color, '');
   assert.equal(sh.cleanCard(null), null);
 });
+
+test('carte de séance : durée, records et détail des exercices', async () => {
+  const sh = await import('../js/core/share.js');
+  const s1 = done('upper-a', new Date(2026, 10, 20, 18).getTime(), { bench: [[100, 5]] });
+  const s2 = done('upper-a', new Date(2026, 10, 24, 18).getTime(), { bench: [[105, 5], [105, 4]], pullup: [[0, 8]] });
+  s2.name = 'Haut du corps A';
+  const c = sh.sessionCard(s2, exercises, 80, '#8b93ff', [s2, s1]);
+  assert.equal(c.payload.emoji, '🏆');
+  assert.equal(c.payload.value, 'Haut du corps A');
+  assert.ok(c.payload.sub.includes('3 séries') && c.payload.sub.includes('1 record 👑'), c.payload.sub);
+  assert.deepEqual(c.payload.lines, ['👑 Développé couché · 105×5 · 105×4', 'Tractions · PDC×8']);
+  // Sans historique : pas de records, mais le détail reste
+  const c2 = sh.sessionCard(s1, exercises, 80);
+  assert.equal(c2.payload.emoji, '🏋️');
+  assert.equal(c2.payload.lines.length, 1);
+  // Les lignes reçues sont bornées
+  assert.equal(sh.cleanCard({ type: 'session', lines: Array(20).fill('x'.repeat(200)) }).lines.length, 8);
+});

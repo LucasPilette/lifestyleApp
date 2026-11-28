@@ -6,6 +6,7 @@ import { navigate } from '../core/router.js';
 import { drawer } from '../core/ui.js';
 import { formatFriendCode } from '../core/prefs.js';
 import { inboxCount } from '../core/social.js';
+import { avatarEl } from './avatar.js';
 import { VERSION } from '../version.js';
 
 const ITEMS = [
@@ -28,7 +29,7 @@ export function openSideMenu() {
   drawer((close) => [
     h('div', { class: 'drawer-head' },
       h('button', { class: 'drawer-profile', onClick: () => { close(); navigate('/profile'); } },
-        h('span', { class: 'pf-avatar' }, name.trim().charAt(0).toUpperCase()),
+        avatarEl({ name, url: state.settings.avatar, size: 'big' }),
         h('span', { class: 'drawer-id' },
           h('span', { class: 'drawer-app' }, name),
           h('span', { class: 'drawer-user' }, state.settings.friendCode ? `Code ami · ${formatFriendCode(state.settings.friendCode)}` : 'Eclipse'))),

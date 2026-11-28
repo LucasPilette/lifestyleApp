@@ -8,7 +8,8 @@ import { allWidgets, cleanWidgets, formatFriendCode, reconcileHabits } from '../
 import { applyTheme } from '../core/theme.js';
 import { todayKey } from '../core/date.js';
 import { themePicker, widgetPicker, flameToggle, habitsEditor, notificationToggle } from '../components/prefs-ui.js';
-import { isConfigured, ensureProfile, syncName, schedulePushStatus } from '../core/social.js';
+import { isConfigured, ensureProfile, syncName, schedulePushStatus, setAvatar } from '../core/social.js';
+import { avatarEl, pickAvatar } from '../components/avatar.js';
 
 /** Carte « code ami » (réutilisée par l'écran Amis). */
 export function friendCodeCard() {
@@ -57,12 +58,25 @@ export default function profileView(root) {
   const section = (t, ...children) => [h('div', { class: 'section-title' }, t), ...children];
 
   // Identité
-  const initial = h('span', { class: 'pf-avatar' }, (st.name || '?').trim().charAt(0).toUpperCase() || '?');
+  // Photo de profil : toucher pour en choisir une, la changer ou la retirer.
+  const initial = h('button', { class: 'avatar-pick', 'aria-label': 'Photo de profil' });
+  const renderAvatar = () => initial.replaceChildren(
+    state.settings.avatar ? avatarEl({ name: state.settings.name, url: state.settings.avatar, size: 'big' }) : avatarEl({ name: state.settings.name, size: 'big' }),
+    h('span', { class: 'avatar-badge' }, icon(state.settings.avatar ? 'edit' : 'plus', 13)));
+  initial.addEventListener('click', () => {
+    pickAvatar({ hasPhoto: !!state.settings.avatar }).then((v) => {
+      if (v === undefined) return;
+      setAvatar(v);
+      renderAvatar();
+      toast(v ? 'Photo de profil enregistrée' : 'Photo retirée');
+    });
+  });
+  renderAvatar();
   const nameInput = h('input', { class: 'text-input pf-name', type: 'text', value: st.name || '', placeholder: 'Ton prénom', maxlength: 40, autocomplete: 'given-name', 'aria-label': 'Prénom' });
   nameInput.addEventListener('input', () => {
     const v = nameInput.value.trim();
     updateSettings({ name: v });
-    initial.textContent = v.charAt(0).toUpperCase() || '?';
+    if (!state.settings.avatar) renderAvatar();
     syncName();
   });
 

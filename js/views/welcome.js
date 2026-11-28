@@ -13,7 +13,8 @@ import { parseNum } from '../core/format.js';
 import { suggestDir } from '../core/goals.js';
 import { addToGoalList } from '../components/goal-editor.js';
 import { themePicker, focusPicker, widgetPicker, flameToggle, habitsEditor, notificationToggle } from '../components/prefs-ui.js';
-import { isConfigured, ensureProfile } from '../core/social.js';
+import { isConfigured, ensureProfile, setAvatar } from '../core/social.js';
+import { avatarEl, pickAvatar } from '../components/avatar.js';
 
 const STEPS = 5;
 const key = (a) => JSON.stringify([...a].sort());
@@ -34,6 +35,7 @@ export default function welcomeView(root) {
     weightTarget: st.objectives?.weight?.target ?? null,
     habits: [...(st.habits || [])],
     notifications: !!st.notifications?.enabled,
+    avatar: st.avatar || null,
     share: !!st.shareActivity,
   };
   // Widgets / flamme recalculés seulement si les choix précédents ont changé.
@@ -80,6 +82,23 @@ export default function welcomeView(root) {
 
   const title = (t, sub) => [h('h1', { class: 'ob-title' }, t), sub ? h('p', { class: 'ob-sub' }, sub) : null];
 
+  /** Photo de profil (facultative) : touche le rond pour en choisir une. */
+  function avatarPicker() {
+    const btn = h('button', { class: 'avatar-pick', 'aria-label': 'Photo de profil' });
+    const render = () => btn.replaceChildren(
+      d.avatar ? avatarEl({ name: d.name, url: d.avatar, size: 'big' }) : h('span', { class: 'avatar-empty' }, icon('user', 26)),
+      h('span', { class: 'avatar-badge' }, icon(d.avatar ? 'edit' : 'plus', 13)));
+    btn.addEventListener('click', () => {
+      pickAvatar({ hasPhoto: !!d.avatar }).then((v) => {
+        if (v === undefined) return;
+        d.avatar = v;
+        render();
+      });
+    });
+    render();
+    return btn;
+  }
+
   // 1. Prénom + thème
   function stepIdentity() {
     const input = h('input', {
@@ -92,7 +111,7 @@ export default function welcomeView(root) {
       h('div', { class: 'ob-logo', 'aria-hidden': 'true' }),
       ...title(prefill ? 'Personnalise Eclipse' : 'Bienvenue sur Eclipse', 'Ton compagnon du quotidien : sport, sommeil, nutrition, routines.'),
       h('label', { class: 'ob-label' }, 'Comment tu t’appelles ?'),
-      input,
+      h('div', { class: 'ob-identity' }, avatarPicker(), input),
       h('label', { class: 'ob-label' }, 'Choisis ton thème'),
       themePicker({ theme: d.theme, mode: d.mode, onChange: (t) => { Object.assign(d, t); applyTheme(t); } }),
     ];
@@ -238,6 +257,7 @@ export default function welcomeView(root) {
       updateSettings({ objectives: { weight: { target: d.weightTarget, dir: suggestDir('weight', d.weightTarget, last?.value ?? null), start: last?.value ?? null, achievedAt: null } } });
       addToGoalList('weight');
     }
+    if ((d.avatar || null) !== (st.avatar || null)) setAvatar(d.avatar);
     await markOnboarded();
     if (isConfigured()) ensureProfile({ force: true }).catch(() => {});
     toast(`Bienvenue ${d.name.trim()} !`);

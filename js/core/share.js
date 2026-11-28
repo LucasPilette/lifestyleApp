@@ -3,7 +3,7 @@
 // (aperçu de la liste d'amis, notification, ami qui n'a pas encore mis l'app à jour). Pur : testable sous Node.
 
 import { fmtNum, fmtKg, fmtSleep, fmtDuration, fmtVolume } from './format.js';
-import { sessionRecords, sessionStats } from './training.js';
+import { sessionRecords, sessionStats, setsSummary } from './training.js';
 import { MOODS } from './metrics.js';
 import { WIDGETS, customSummary } from './prefs.js';
 
@@ -21,11 +21,13 @@ export function cleanCard(p) {
     value: clip(p.value, 80),
     sub: clip(p.sub, 80),
     color: COLOR_RE.test(String(p.color || '')) ? p.color : '',
+    lines: Array.isArray(p.lines) ? p.lines.slice(0, 8).map((l) => clip(l, 70)).filter(Boolean) : [],
   };
 }
 
-function card(type, emoji, title, value, sub = '', color = '') {
-  const payload = cleanCard({ type, emoji, title, value, sub, color });
+function card(type, emoji, title, value, sub = '', color = '', lines = []) {
+  const payload = cleanCard({ type, emoji, title, value, sub, color, lines });
+  if (!payload.lines.length) delete payload.lines;
   return { payload, body: `${emoji} ${title} : ${value}${sub ? ` (${sub})` : ''}` };
 }
 
@@ -68,10 +70,26 @@ export function recordCard(rec, exercise, when = '') {
   return card('pr', '👑', 'Nouveau record', `${name} : ${what}`, [kind, when].filter(Boolean).join(' · '), '#ffc23d');
 }
 
-export function sessionCard(session, exercises, bodyweight, color = '') {
+/**
+ * Séance terminée : durée, séries, volume, records battus, et le détail des exercices (une ligne chacun).
+ * `sessions` (toutes les séances) sert à repérer les records ; facultatif.
+ */
+export function sessionCard(session, exercises, bodyweight, color = '', sessions = null) {
   const st = sessionStats(session, exercises, bodyweight);
-  return card('session', '🏋️', 'Séance terminée', session.name || 'Séance',
-    [fmtDuration(st.duration), `${st.sets} séries`, st.volume ? fmtVolume(st.volume) : ''].filter(Boolean).join(' · '), color);
+  const records = sessions ? sessionRecords(session, sessions, exercises, bodyweight) : [];
+  const recIds = new Set(records.map((r) => r.exerciseId));
+  const lines = [];
+  for (const b of session.blocks || []) {
+    for (const it of b.items) {
+      const sets = it.sets.filter((x) => x.done && x.kind === 'work');
+      if (!sets.length) continue;
+      const ex = exercises.get(it.exerciseId);
+      lines.push(`${recIds.has(it.exerciseId) ? '👑 ' : ''}${ex?.name || 'Exercice'} · ${setsSummary(sets, ex)}`);
+    }
+  }
+  const sub = [fmtDuration(st.duration), `${st.sets} séries`, st.volume ? fmtVolume(st.volume) : '', records.length ? `${records.length} record${records.length > 1 ? 's' : ''} 👑` : '']
+    .filter(Boolean).join(' · ');
+  return card('session', records.length ? '🏆' : '🏋️', 'Séance terminée', session.name || 'Séance', sub, color, lines);
 }
 
 /** Cartes des valeurs du jour, dans l'ordre des widgets affichés (seulement ceux renseignés). */

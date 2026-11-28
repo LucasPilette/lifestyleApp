@@ -23,6 +23,10 @@ export const DEFAULT_SETTINGS = {
   notifications: { enabled: false, reminderHour: 21 }, // accepte d'en recevoir ; rappel du soir (null = aucun)
   shareActivity: false, // partager humeur du jour et dernière séance avec ses amis
   friendCode: null, // code ami (6 chiffres), attribué par le serveur
+  avatar: null, // photo de profil (JPEG carré 256 px, en données) ; avatarVersion change à chaque photo
+  avatarVersion: 0,
+  avatarSyncedVersion: 0,
+  avatarUrl: null, // adresse publique de la photo sur le serveur
   objectives: DEFAULT_OBJECTIVES, // objectifs à long terme (voir core/goals.js)
   goalList: DEFAULT_GOAL_LIST, // objectifs affichés, dans l'ordre
   goals: { sleepMin: 480, kcal: 2600, prot: 150, steps: 10000, minSessions: 3 }, // minSessions : minimum hebdo pour garder la flamme

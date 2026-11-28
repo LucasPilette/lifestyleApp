@@ -1736,3 +1736,101 @@ body::before {
 .bubble.has-card, .bubble.mine.has-card, .bubble.theirs.has-card { background: transparent; border: 0; padding: 0; box-shadow: none; color: var(--text); }
 .bubble.has-card .bubble-time { color: var(--text-3); opacity: 1; padding: 3px 4px 0; }
 .bubble.mine.has-card .chat-card { box-shadow: inset 0 1px 0 rgb(var(--hi) / 0.12), 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent); }
+
+/* ==========================================================================
+   Photos de profil, groupes, écran Amis compact, partage de séance
+   ========================================================================== */
+.pf-avatar { overflow: hidden; }
+.pf-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pf-avatar.tiny { width: 22px; height: 22px; font-size: 11px; box-shadow: none; }
+.pf-avatar.big { width: 64px; height: 64px; font-size: 26px; }
+.group-avatar { position: relative; display: inline-block; flex: none; width: 40px; height: 40px; }
+.group-avatar .pf-avatar { position: absolute; width: 28px; height: 28px; font-size: 13px; border: 2px solid var(--sheet-1); }
+.group-avatar .pf-avatar:first-child { top: 0; left: 0; }
+.group-avatar .pf-avatar:last-child { bottom: 0; right: 0; }
+.pf-avatar.group-solo { color: var(--on-accent); }
+
+/* Choix de la photo (onboarding, profil) */
+.avatar-pick { position: relative; flex: none; width: 64px; height: 64px; border-radius: 50%; }
+.avatar-pick:active { transform: scale(0.95); }
+.avatar-empty {
+  width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; color: var(--text-2);
+  background: rgb(var(--hi) / 0.07); border: 1.5px dashed rgb(var(--hi) / 0.25);
+}
+.avatar-badge {
+  position: absolute; right: -2px; bottom: -2px; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
+  color: var(--on-accent); background: linear-gradient(135deg, var(--accent), var(--accent-2)); border: 2px solid var(--bg);
+}
+.ob-identity { display: flex; align-items: center; gap: 12px; }
+.ob-identity .ob-name { flex: 1; min-width: 0; }
+.drawer-profile .pf-avatar.big { width: 52px; height: 52px; font-size: 22px; }
+
+/* Écran Amis : outils compacts et dépliables */
+.friends-page { gap: 10px; }
+.fr-tools { display: flex; gap: 8px; }
+.fr-tool {
+  flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 40px; padding: 0 10px; border-radius: 14px;
+  font-size: 14px; font-weight: 700; color: var(--text); background: rgb(var(--hi) / 0.07); border: 1px solid rgb(var(--hi) / 0.1); white-space: nowrap;
+}
+.fr-tool .icon:first-child { color: var(--accent); }
+.fr-tool.on { border-color: color-mix(in srgb, var(--accent) 55%, transparent); background: var(--accent-soft); }
+.fr-caret { color: var(--text-3); transition: transform 0.2s; }
+.fr-tool.on .fr-caret { transform: rotate(180deg); }
+.fr-panel { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 18px; background: rgb(var(--hi) / 0.05); border: 1px solid rgb(var(--hi) / 0.08); animation: pop 0.15s ease-out; }
+.fr-panel .fc-code { font-size: 30px; }
+.fr-note { font-size: 12px; margin: 4px 4px 0; line-height: 1.5; }
+
+/* Liste des discussions */
+.conv-row { gap: 12px; }
+.conv-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.conv-title .row-title { flex: none; max-width: 60%; }
+.conv-status { font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.conv-time { font-size: 12px; color: var(--text-3); }
+.conv-row.unread .row-title, .conv-row.unread .row-sub { color: var(--text-hi); font-weight: 700; }
+.conv-row.unread .conv-time { color: var(--accent); font-weight: 700; }
+.conv-row.low { background: color-mix(in srgb, var(--c-mood) 10%, transparent); }
+
+/* Choix d'amis (groupe) */
+.pick-list { display: flex; flex-direction: column; gap: 4px; max-height: 46dvh; overflow-y: auto; }
+.pick-row { display: flex; align-items: center; gap: 12px; padding: 8px 6px; border-radius: 14px; text-align: left; font-weight: 600; }
+.pick-row > span:nth-child(2) { flex: 1; }
+.pick-row.sel { background: var(--accent-soft); }
+.pick-row.sel .cc-box { background: var(--accent); border-color: var(--accent); }
+
+/* En-tête de discussion */
+.chat-head { display: flex; align-items: center; gap: 10px; min-width: 0; max-width: 100%; margin: 0 auto; text-align: left; }
+.chat-head-avatar { flex: none; }
+.chat-head-avatar .pf-avatar { width: 36px; height: 36px; font-size: 15px; }
+.chat-head-avatar .group-avatar { width: 36px; height: 36px; }
+.chat-head-avatar .group-avatar .pf-avatar { width: 24px; height: 24px; font-size: 11px; }
+.chat-head-txt { display: flex; flex-direction: column; min-width: 0; }
+.chat-head-title { font-size: 16.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-head-sub { font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-head-sub:empty { display: none; }
+.bubble-author { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--text-2); margin: 6px 0 -1px 2px; }
+
+/* Carte de séance : détail des exercices */
+.chat-card-lines { list-style: none; margin: 6px 0 0; padding: 6px 0 0; border-top: 1px solid rgb(var(--hi) / 0.1); display: flex; flex-direction: column; gap: 2px; }
+.chat-card-lines li { font-size: 12.5px; color: var(--text-soft); line-height: 1.35; }
+.chat-card:has(.chat-card-lines) { align-items: flex-start; }
+
+/* Envoyer à… */
+.send-list { display: flex; flex-direction: column; gap: 4px; max-height: 44dvh; overflow-y: auto; }
+.send-row { display: flex; align-items: center; gap: 12px; padding: 8px 6px; border-radius: 14px; text-align: left; }
+.send-row:active { background: rgb(var(--hi) / 0.06); }
+.send-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.send-txt b { font-size: 15.5px; }
+.send-txt span { font-size: 12.5px; color: var(--text-2); }
+.send-status { flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: var(--accent); background: var(--accent-soft); }
+.send-row.sent .send-status { color: var(--on-accent); background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+.spinner { width: 16px; height: 16px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: spin 0.8s linear infinite; }
+.share-session-btn { margin-top: 6px; }
+.chat-head-avatar { display: inline-flex; }
+
+/* Carte de séance : performances repliées, dépliées au toucher */
+.chat-card-details { margin-top: 6px; }
+.chat-card-details summary { list-style: none; display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px 5px 0; font-size: 12.5px; font-weight: 700; color: color-mix(in srgb, var(--cc) 60%, var(--mix-hi)); cursor: pointer; }
+.chat-card-details summary::-webkit-details-marker { display: none; }
+.chat-card-caret { transition: transform 0.2s; }
+.chat-card-details[open] .chat-card-caret { transform: rotate(180deg); }
+.chat-card-details .chat-card-lines { margin-top: 2px; }

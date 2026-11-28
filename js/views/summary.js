@@ -6,6 +6,8 @@ import { sessionStats, sessionRecords, setsSummary } from '../core/training.js';
 import { fmtDuration, fmtVolume, fmtKg, fmtNum } from '../core/format.js';
 import { navigate } from '../core/router.js';
 import { formatLong, dateKey } from '../core/date.js';
+import { sessionCard } from '../core/share.js';
+import { openSendToSheet } from '../components/share-sheet.js';
 
 export default function summaryView(root, id) {
   const s = getSession(id);
@@ -64,6 +66,8 @@ export default function summaryView(root, id) {
       })),
     h('div', { class: 'section-title' }, 'Note'),
     note,
+    h('button', { class: 'btn block share-session-btn', onClick: () => openSendToSheet(sessionCard(s, state.exercises, bw, sessionColor(s) || '', state.sessions), { title: 'Partager ma séance' }) },
+      icon('share', 18), 'Partager avec un ami ou un groupe'),
     h('button', { class: 'btn primary block', style: { height: '56px', marginTop: '6px' }, onClick: () => navigate('/', { replace: true }) }, 'Retour à l’accueil'));
 
   root.append(h('div', { class: 'view' }, h('div', { style: { height: 'var(--safe-t)' } }), page));

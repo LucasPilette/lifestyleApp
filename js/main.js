@@ -17,7 +17,7 @@ import settingsView from './views/settings.js';
 import goalsView from './views/goals.js';
 import welcomeView from './views/welcome.js';
 import profileView from './views/profile.js';
-import { friendsView, chatView } from './views/friends.js';
+import { friendsView, chatView, groupChatView } from './views/friends.js';
 import widgetEditView from './views/widget-edit.js';
 import coachView from './views/coach.js';
 import { applyTheme } from './core/theme.js';
@@ -41,6 +41,7 @@ route(/^\/welcome$/, welcomeView);
 route(/^\/profile$/, profileView);
 route(/^\/friends$/, friendsView);
 route(/^\/friends\/([0-9a-f-]{36})$/, chatView);
+route(/^\/groups\/([0-9a-f-]{36})$/, groupChatView);
 route(/^\/widgets\/(new|cw_\w+)$/, widgetEditView);
 route(/^\/coach$/, coachView);
 

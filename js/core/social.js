@@ -1,7 +1,7 @@
 // Amis et messages (Supabase). Profil serveur : code ami à 6 chiffres + prénom,
 // humeur du jour et date de la dernière séance seulement si l'utilisateur choisit de les partager.
 
-import { isConfigured, rpc, rest, invoke, accessToken, userId } from './supabase.js';
+import { isConfigured, rpc, rest, invoke, accessToken, userId, uploadFile } from './supabase.js';
 import { state, doneSessions, updateSettings } from './store.js';
 import { todayKey, dateKey } from './date.js';
 import { debounce } from './util.js';
@@ -19,6 +19,7 @@ export function ensureProfile({ force = false } = {}) {
     await accessToken();
     const p = await rpc('ensure_profile', { p_name: state.settings.name || '' });
     if (p?.code && p.code !== state.settings.friendCode) updateSettings({ friendCode: p.code });
+    syncAvatar().catch((e) => console.warn('Photo de profil', e.message));
     return p;
   })();
   profilePromise.catch(() => {
@@ -35,9 +36,7 @@ export const syncName = debounce(() => {
 
 export async function listFriends() {
   await ensureProfile();
-  const list = (await rpc('my_friends')) || [];
-  inboxCache = { at: Date.now(), n: countInbox(list) };
-  return list;
+  return (await rpc('my_friends')) || [];
 }
 
 // Messages non lus + demandes reçues (pastille du menu et de la barre du bas), gardé 30 s.
@@ -46,8 +45,70 @@ const countInbox = (list) => list.reduce((n, f) => n + (f.unread || 0) + (f.stat
 export async function inboxCount() {
   if (!isConfigured() || !state.settings.friendCode) return 0;
   if (Date.now() - inboxCache.at < 30000) return inboxCache.n;
-  await listFriends();
+  const [friends, groups] = await Promise.all([listFriends(), listGroups()]);
+  inboxCache = { at: Date.now(), n: countInbox(friends) + groups.reduce((n, g) => n + (g.unread || 0), 0) };
   return inboxCache.n;
+}
+export const resetInbox = () => { inboxCache = { at: 0, n: 0 }; };
+
+// --- Groupes ---------------------------------------------------------------------
+
+/** Mes groupes (membres, dernier message, non lus). Vide si le serveur n'a pas encore les groupes. */
+export async function listGroups() {
+  await ensureProfile();
+  try {
+    return (await rpc('my_groups')) || [];
+  } catch (e) {
+    if (e?.code === 'PGRST202') return [];
+    throw e;
+  }
+}
+export const createGroup = (name, memberIds) => rpc('create_group', { p_name: name, p_members: memberIds });
+export const renameGroup = (id, name) => rpc('rename_group', { p_group: id, p_name: name });
+export const addGroupMembers = (id, memberIds) => rpc('add_group_members', { p_group: id, p_members: memberIds });
+export const leaveGroup = (id) => rpc('leave_group', { p_group: id });
+export const markGroupRead = (id) => rpc('mark_group_read', { p_group: id }).catch(() => {});
+
+export async function groupConversation(id, after = 0, since = null) {
+  return (await rpc('group_conversation', { p_group: id, p_after: after, p_since: since })) || [];
+}
+
+export async function sendGroupMessage(id, body, payload = null) {
+  const rows = await rest('messages', { method: 'POST', body: { group_id: id, body, ...(payload ? { payload } : {}) }, prefer: 'return=representation' });
+  notify('group_message', id);
+  return rows?.[0];
+}
+
+// --- Photo de profil ----------------------------------------------------------------
+// La photo est gardée sur le téléphone (settings.avatar, carré 256 px) et envoyée sur le serveur
+// quand il y a un compte ; avatarVersion change à chaque nouvelle photo.
+
+/** Nouvelle photo (données JPEG) ou null pour la retirer. */
+export function setAvatar(dataUrl) {
+  updateSettings({ avatar: dataUrl || null, avatarVersion: Date.now() });
+  syncAvatar().catch((e) => console.warn('Photo de profil', e.message));
+}
+
+let avatarSyncing = null;
+export function syncAvatar() {
+  if (avatarSyncing) return avatarSyncing;
+  avatarSyncing = (async () => {
+    const st = state.settings;
+    const version = st.avatarVersion || 0;
+    if (!isConfigured() || !st.friendCode || (st.avatarSyncedVersion || 0) === version) return;
+    await accessToken();
+    const uid = userId();
+    let url = null;
+    if (st.avatar) {
+      const blob = await (await fetch(st.avatar)).blob();
+      url = `${await uploadFile('avatars', `${uid}/avatar.jpg`, blob, 'image/jpeg')}?v=${version}`;
+    }
+    await rest(`profiles?id=eq.${encodeURIComponent(uid)}`, { method: 'PATCH', body: { avatar_url: url } });
+    updateSettings({ avatarSyncedVersion: version, avatarUrl: url });
+  })().finally(() => {
+    avatarSyncing = null;
+  });
+  return avatarSyncing;
 }
 
 /**

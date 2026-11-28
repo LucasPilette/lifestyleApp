@@ -9,6 +9,8 @@ import { actionSheet, confirmSheet, pageHeader, promptSheet, toast } from '../co
 import { formatLong, dateKey, formatTime } from '../core/date.js';
 import { debounce, clone } from '../core/util.js';
 import { createSessionEditor } from '../components/session-editor.js';
+import { sessionCard } from '../core/share.js';
+import { openSendToSheet } from '../components/share-sheet.js';
 
 export default function logView(root, id) {
   const s = getSession(id);
@@ -29,7 +31,7 @@ export default function logView(root, id) {
         title: s.name,
         subtitle: `${formatLong(dateKey(new Date(s.startedAt)))} · ${formatTime(s.startedAt)}`,
         onBack: () => back('/history'),
-        actions: [iconButton('more', 'Options', menu)],
+        actions: [iconButton('share', 'Partager la séance', share), iconButton('more', 'Options', menu)],
       }),
       h('div', { class: 'page' },
         h('div', { class: 'tiles' },
@@ -92,6 +94,10 @@ export default function logView(root, id) {
       editing = false;
       renderRead();
     }
+  }
+
+  function share() {
+    openSendToSheet(sessionCard(s, state.exercises, state.settings.bodyweight, sessionColor(s) || '', state.sessions), { title: 'Partager la séance' });
   }
 
   async function menu() {
