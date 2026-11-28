@@ -793,3 +793,18 @@ test('Grow : la graine pousse, gagne des engrais et fane sans eux', async () => 
   g = gr.growth(days, today, { items: ['mood'], weekly: true, minSessions: 3, sessionDates });
   assert.deepEqual([g.streak, g.savedWeeks.has('2026-11-16')], [20, true]);
 });
+
+test('Grow : engrais offerts à la création du compte', async () => {
+  const gr = await import('../js/core/growth.js');
+  const { addDays } = await import('../js/core/date.js');
+  const today = '2026-11-27';
+  const days = new Map();
+  // 3 jours arrosés, un oubli, 2 jours arrosés : les engrais de départ rattrapent l'oubli
+  ['1', '1', '1', '0', '1', '1'].forEach((c, i) => { if (c === '1') days.set(addDays(today, -(5 - i)), { mood: 4 }); });
+  const g = gr.growth(days, today, { items: ['mood'], weekly: false, fertilizer: 2 });
+  assert.deepEqual([g.streak, g.fertilizer, g.saved.size], [5, 1, 1]);
+  assert.equal(gr.growth(new Map(), today, { items: ['mood'], weekly: false, fertilizer: 2 }).fertilizer, 2);
+  assert.equal(gr.growth(new Map(), today, { items: ['mood'], weekly: false, fertilizer: 9 }).fertilizer, 3);
+  // Sans engrais de départ : la plante fane
+  assert.equal(gr.growth(days, today, { items: ['mood'], weekly: false }).streak, 2);
+});

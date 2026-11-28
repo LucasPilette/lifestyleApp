@@ -272,7 +272,6 @@ function createGroupSheet(friends) {
 
 // --- Discussion (ami ou groupe) ---------------------------------------------------------
 
-const QUICK_EMOJIS = ['🔥', '💪', '👏', '😂', '❤️', '🙌', '😮', '🎉', '🙏', '😴', '🥗', '🏋️', '👟', '💧', '😅', '🤝', '✅', '🚀'];
 const REACTIONS = ['❤️', '🔥', '💪', '👏', '😂', '😮'];
 
 /**
@@ -284,10 +283,8 @@ function conversationView(root, cfg) {
   const list = h('div', { class: 'chat-list', role: 'log', 'aria-live': 'polite' }, h('div', { class: 'empty faint' }, 'Chargement…'));
   const input = h('textarea', { class: 'text-input chat-input', rows: 1, maxlength: 1000, placeholder: 'Message', 'aria-label': 'Message' });
   const sendBtn = h('button', { class: 'chat-send', 'aria-label': 'Envoyer', onClick: () => send() }, icon('send', 20));
-  const emojiBtn = h('button', { class: 'chat-tool', 'aria-label': 'Émojis', onClick: () => toggleEmojis() }, h('span', { class: 'chat-tool-emoji' }, '😊'));
   const shareBtn = h('button', { class: 'chat-tool', 'aria-label': 'Partager une carte', onClick: () => openShareSheet((c) => send(c)) }, icon('plus', 22));
-  const emojiRow = h('div', { class: 'chat-emojis hidden' }, QUICK_EMOJIS.map((e) => h('button', { class: 'chat-emoji', onClick: () => insertEmoji(e) }, e)));
-  const bar = h('div', { class: 'chat-bar' }, emojiRow, h('div', { class: 'chat-bar-row' }, shareBtn, emojiBtn, input, sendBtn));
+  const bar = h('div', { class: 'chat-bar' }, h('div', { class: 'chat-bar-row' }, shareBtn, input, sendBtn));
   let messages = [];
   let lastId = 0;
   let since = null;
@@ -303,19 +300,6 @@ function conversationView(root, cfg) {
   };
   input.addEventListener('input', autosize);
 
-  function toggleEmojis(force) {
-    const show = force ?? emojiRow.classList.contains('hidden');
-    emojiRow.classList.toggle('hidden', !show);
-    emojiBtn.classList.toggle('on', show);
-  }
-  function insertEmoji(e) {
-    const a = input.selectionStart ?? input.value.length;
-    const b = input.selectionEnd ?? input.value.length;
-    input.value = input.value.slice(0, a) + e + input.value.slice(b);
-    input.setSelectionRange(a + e.length, a + e.length);
-    haptic();
-    autosize();
-  }
 
   const atBottom = () => window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 80;
   const toBottom = () => requestAnimationFrame(() => window.scrollTo(0, document.documentElement.scrollHeight));
@@ -465,7 +449,6 @@ function conversationView(root, cfg) {
   };
   vv?.addEventListener('resize', onViewport);
   vv?.addEventListener('scroll', onViewport);
-  input.addEventListener('focus', () => toggleEmojis(false));
 
   const onVis = () => document.visibilityState === 'visible' && poll();
   document.addEventListener('visibilitychange', onVis);

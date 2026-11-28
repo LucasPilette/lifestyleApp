@@ -1,7 +1,8 @@
-// Profil : prénom, code ami, thème, widgets de l'accueil, ce qui arrose la graine, routines, partage et notifications.
+// Profil : prénom et photo, puis en sous-menus dépliables : code ami, thème, widgets de l'accueil, ce qui arrose la graine,
+// routines, partage et notifications.
 
 import { h, icon } from '../core/dom.js';
-import { state, updateSettings, setDayFields, updateMeta } from '../core/store.js';
+import { state, updateSettings, setDayFields, updateMeta, subscribe } from '../core/store.js';
 import { back, navigate } from '../core/router.js';
 import { pageHeader, stepper, toggle, toast, segmented } from '../core/ui.js';
 import { allWidgets, cleanWidgets, formatFriendCode, reconcileHabits } from '../core/prefs.js';
@@ -10,6 +11,8 @@ import { todayKey } from '../core/date.js';
 import { themePicker, widgetPicker, flameToggle, habitsEditor, notificationToggle } from '../components/prefs-ui.js';
 import { isConfigured, ensureProfile, syncName, schedulePushStatus, setAvatar } from '../core/social.js';
 import { avatarEl, pickAvatar } from '../components/avatar.js';
+import { foldGroup } from '../components/fold.js';
+import { THEMES, MODES, WIDGETS } from '../core/prefs.js';
 
 /** Carte « code ami » (réutilisée par l'écran Amis). */
 export function friendCodeCard() {
@@ -110,23 +113,71 @@ export default function profileView(root) {
     if (fix) setDayFields(todayKey(), fix);
   };
 
-  const page = h('div', { class: 'page' },
+  // Résumés des sous-menus
+  const shortList = (names) => (names.length > 3 ? `${names.slice(0, 3).join(', ')}…` : names.join(', ')) || 'Rien pour l’instant';
+  const widgetNames = () => {
+    const defs = allWidgets(state.settings.customWidgets || []);
+    return cleanWidgets(state.settings.widgets, state.settings.customWidgets).map((id) => defs[id]?.label).filter(Boolean);
+  };
+  const waterSub = () => {
+    const defs = allWidgets(state.settings.customWidgets || []);
+    const shown = cleanWidgets(state.settings.widgets, state.settings.customWidgets);
+    return shortList(state.settings.flame.filter((id) => shown.includes(id)).map((id) => (id === 'training' ? `${state.settings.goals.minSessions || 3} séances / sem.` : defs[id]?.label)).filter(Boolean));
+  };
+  const themeSub = () => `${THEMES[state.settings.theme]?.label || ''} · ${(MODES.find(([m]) => m === state.settings.mode)?.[1] || '').toLowerCase()}`;
+  const friendsSub = () => {
+    const s = state.settings;
+    const parts = [s.shareActivity ? 'Partage activé' : 'Partage désactivé'];
+    parts.push(s.notifications?.enabled ? (s.notifications.reminderHour != null ? `rappel à ${s.notifications.reminderHour} h` : 'notifications') : 'sans notifications');
+    return parts.join(' · ');
+  };
+  const fold = foldGroup('profile');
+  let widgetsFold, waterFold, themeFold, habitsFold, friendsFold;
+  const refreshSubs = () => {
+    widgetsFold.setSub(shortList(widgetNames()));
+    waterFold.setSub(waterSub());
+    themeFold.setSub(themeSub());
+    habitsFold.setSub(state.settings.habits?.length ? `${state.settings.habits.length} routine${state.settings.habits.length > 1 ? 's' : ''}` : 'Aucune routine');
+    friendsFold.setSub(friendsSub());
+  };
+  const unsubscribe = subscribe((type) => type === 'settings' && refreshSubs());
+
+  const page = h('div', { class: 'page fold-page' },
     h('section', { class: 'card pf-head' }, initial, h('div', { class: 'pf-id' }, h('label', { class: 'ob-field-label' }, 'Prénom'), nameInput)),
-    friendCodeCard(),
-    ...section('Apparence', themePicker({ theme: st.theme, mode: st.mode, onChange: (t) => { updateSettings(t); applyTheme(t); } })),
-    ...section('Widgets de l’accueil',
-      widgetPicker({
-        value: cleanWidgets(st.widgets, st.customWidgets), reorder: true, defs: allWidgets(st.customWidgets),
-        onChange: (v) => { updateSettings({ widgets: v }); renderFlame(); },
-        onEdit: (id) => navigate(`/widgets/${id}`),
-      }),
-      h('button', { class: 'btn dashed block', onClick: () => navigate('/widgets/new') }, icon('plus', 18), 'Créer un widget')),
-    ...section('Ce qui arrose ta graine 💧', h('p', { class: 'pf-hint' }, 'Active 💧 ce que tu dois faire chaque jour : une journée où tout est fait arrose ta graine et la fait pousser.'), flameBox),
-    ...section('Mes routines', h('div', { class: 'card' }, habitsEditor({ value: st.habits || [], onChange: onHabits }))),
-    ...section('Amis et notifications',
-      h('div', { class: 'list' },
+    fold({
+      id: 'code', icon: 'users', color: 'var(--c-mood)', title: 'Mon code ami',
+      sub: state.settings.friendCode ? formatFriendCode(state.settings.friendCode) : 'À partager à tes amis',
+      body: () => friendCodeCard(),
+    }),
+    themeFold = fold({
+      id: 'theme', icon: 'sun', color: 'var(--accent-2)', title: 'Apparence', sub: themeSub(),
+      body: () => themePicker({ theme: st.theme, mode: st.mode, onChange: (t) => { updateSettings(t); applyTheme(t); } }),
+    }),
+    widgetsFold = fold({
+      id: 'widgets', icon: 'list', color: 'var(--c-sleep)', title: 'Widgets de l’accueil', sub: shortList(widgetNames()),
+      body: () => [
+        widgetPicker({
+          value: cleanWidgets(st.widgets, st.customWidgets), reorder: true, defs: allWidgets(st.customWidgets),
+          onChange: (v) => { updateSettings({ widgets: v }); renderFlame(); },
+          onEdit: (id) => navigate(`/widgets/${id}`),
+        }),
+        h('button', { class: 'btn dashed block', onClick: () => navigate('/widgets/new') }, icon('plus', 18), 'Créer un widget'),
+      ],
+    }),
+    waterFold = fold({
+      id: 'water', icon: 'drop', color: 'var(--water)', title: 'Ce qui arrose ta graine', sub: waterSub(),
+      body: () => [h('p', { class: 'pf-hint' }, 'Active 💧 ce que tu dois faire chaque jour : une journée où tout est fait arrose ta graine et la fait pousser.'), flameBox],
+    }),
+    habitsFold = fold({
+      id: 'habits', icon: 'check', color: 'var(--c-routine)', title: 'Mes routines',
+      sub: st.habits?.length ? `${st.habits.length} routine${st.habits.length > 1 ? 's' : ''}` : 'Aucune routine',
+      body: () => h('div', { class: 'card' }, habitsEditor({ value: st.habits || [], onChange: onHabits })),
+    }),
+    friendsFold = fold({
+      id: 'friends', icon: 'bell', color: '#60a5fa', title: 'Amis et notifications', sub: friendsSub(),
+      body: () => h('div', { class: 'list' },
         h('div', { class: 'row' }, icon('smile', 20),
-          h('div', { class: 'row-main' }, h('div', { class: 'row-title' }, 'Partager avec mes amis'), h('div', { class: 'row-sub' }, 'Humeur du jour, séances, journées parfaites')),
+          h('div', { class: 'row-main' }, h('div', { class: 'row-title' }, 'Partager avec mes amis'), h('div', { class: 'row-sub' }, 'Humeur du jour, séances, journées réussies')),
           toggle(!!st.shareActivity, (v) => { updateSettings({ shareActivity: v }); schedulePushStatus(); }, 'Partager')),
         notificationToggle(!!st.notifications?.enabled, (v) => updateSettings({ notifications: { enabled: v } })),
         h('div', { class: 'row pf-reminder' }, icon('timer', 20),
@@ -134,9 +185,12 @@ export default function profileView(root) {
             h('div', { class: 'row-sub' }, 'Si ta graine n’est pas encore arrosée le soir (« ta pousse a soif »). Avec les notifications activées.'),
             segmented([['off', 'Aucun'], ['19', '19 h'], ['20', '20 h'], ['21', '21 h'], ['22', '22 h']],
               st.notifications?.reminderHour == null ? 'off' : String(st.notifications.reminderHour),
-              (v) => { updateSettings({ notifications: { reminderHour: v === 'off' ? null : Number(v) } }); schedulePushStatus(); }))))),
-    h('button', { class: 'btn ghost block', onClick: async () => { await updateMeta({ tourDone: false, help: {} }); navigate('/'); } }, icon('info', 18), 'Revoir le tutoriel'),
-    h('button', { class: 'btn ghost block', onClick: () => navigate('/welcome') }, icon('refresh', 18), 'Refaire le questionnaire d’accueil'));
+              (v) => { updateSettings({ notifications: { reminderHour: v === 'off' ? null : Number(v) } }); schedulePushStatus(); })))),
+    }),
+    h('div', { class: 'pf-foot' },
+      h('button', { class: 'btn ghost block', onClick: async () => { await updateMeta({ tourDone: false, help: {} }); navigate('/'); } }, icon('info', 18), 'Revoir le tutoriel'),
+      h('button', { class: 'btn ghost block', onClick: () => navigate('/welcome') }, icon('refresh', 18), 'Refaire le questionnaire d’accueil')));
 
   root.append(h('div', { class: 'view' }, pageHeader({ title: 'Profil', onBack: () => back('/') }), page));
+  return unsubscribe;
 }

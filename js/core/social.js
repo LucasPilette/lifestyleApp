@@ -196,6 +196,7 @@ function flameToday(today) {
     sessionDates, minSessions,
     graceUntil: state.meta.createdAt ? dateKey(new Date(state.meta.createdAt)) : null,
     items: rules.items, weekly: rules.weekly, custom: rules.custom,
+    fertilizer: state.meta.starterFertilizer || 0,
   };
   // Ce qu'il reste, en toutes lettres pour le rappel : « ta nuit et ton humeur », « 2 séances d’ici dimanche »
   const todo = todoItems(dayChecklist(state.days, today, rules.items, rules.custom));

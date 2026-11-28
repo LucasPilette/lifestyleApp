@@ -3,7 +3,7 @@
 
 import { h, icon, iconButton, numInput } from '../core/dom.js';
 import { state, getDay, setDayField, setDayFields, setDayCustom, activeSession, doneSessions, sessionColor, updateSettings, updateMeta } from '../core/store.js';
-import { todayKey, addDays, formatLong, formatShort, weekStart, dateKey, agoLabel, formatWeekday } from '../core/date.js';
+import { todayKey, addDays, formatLong, formatCompact, formatShort, weekStart, dateKey, agoLabel, formatWeekday } from '../core/date.js';
 import { METRICS, MOODS, meetsGoal, dayChecklist, weekTraining, weightRequired, lastValueBefore } from '../core/metrics.js';
 import { growth, STAGES } from '../core/growth.js';
 import { openPlantSheet, celebrateStage, introduceGrow } from '../components/plant.js';
@@ -75,6 +75,8 @@ export default function home(root, dateParam) {
 
   // --- En-tête : date centrée ---
   const goDay = (k) => navigate(k >= today ? '/' : `/day/${k}`, { replace: true });
+  // Réserve d'engrais (en haut à gauche) : toucher ouvre la plante
+  const fertPill = h('button', { class: 'fert-pill glass-btn', onClick: () => showPlant() });
   const showCalendar = () => {
     const sessionDays = new Map();
     for (const s of doneSessions()) {
@@ -88,11 +90,11 @@ export default function home(root, dateParam) {
     openCalendar({ selected: date, today, widgets, customs, isWatered: (k) => g.watered.has(k), isSaved: (k) => g.saved.has(k), sessionDays, onPick: goDay });
   };
   const header = h('header', { class: 'topbar home-top' },
-    h('div', { class: 'top-left' }, iconButton('menu', 'Menu', openSideMenu, 'glass-btn')),
+    h('div', { class: 'top-left' }, iconButton('menu', 'Menu', openSideMenu, 'glass-btn'), fertPill),
     h('div', { class: 'daynav' },
       h('button', { class: 'icon-btn', 'aria-label': 'Jour précédent', onClick: () => goDay(addDays(date, -1)) }, icon('back', 18)),
       h('button', { class: 'day-label', 'aria-label': `${isToday ? 'Aujourd’hui' : formatLong(date)} : ouvrir le calendrier`, onClick: showCalendar },
-        h('span', null, isToday ? 'Aujourd’hui' : formatLong(date)), icon('down', 14, 'day-caret')),
+        h('span', null, isToday ? 'Aujourd’hui' : date === addDays(today, -1) ? 'Hier' : formatCompact(date)), icon('down', 14, 'day-caret')),
       h('button', { class: 'icon-btn', 'aria-label': 'Jour suivant', disabled: isToday, onClick: () => goDay(addDays(date, 1)) }, icon('chevron', 18))),
     h('div', { class: 'top-right' }));
 
@@ -106,6 +108,7 @@ export default function home(root, dateParam) {
     items: rules.items,
     weekly: rules.weekly,
     custom: rules.custom,
+    fertilizer: state.meta.starterFertilizer || 0,
   });
   /** Ce qui arrose la graine, en clair (fiche de la plante). */
   const waterRuleText = () => {
@@ -115,10 +118,11 @@ export default function home(root, dateParam) {
     if (rules.weekly) parts.push(`Et au moins ${minSessions} séances par semaine.`);
     return parts.join(' ') || 'Rien ne l’arrose pour l’instant : choisis ce qui compte dans ton profil.';
   };
-  const ringBox = h('button', { class: 'ring-box', onClick: () => {
+  const showPlant = () => {
     const c = dayChecklist(state.days, today, rules.items, rules.custom);
     openPlantSheet(growth(state.days, today, streakOpts()), { rules: waterRuleText(), todo: todoText(c) });
-  } });
+  };
+  const ringBox = h('button', { class: 'ring-box', onClick: showPlant });
   let wasWatered = null;
   /** Nouvelles de la plante (une fois chacune) : nouveau stade, engrais gagné ou utilisé, plante fanée. */
   const plantNews = (g) => {
@@ -150,6 +154,9 @@ export default function home(root, dateParam) {
     ringBox.replaceChildren(
       dayRings({ data: c.items.length ? c.done / c.items.length : 0, activity: hasTraining ? Math.min(1, wk.count / minSessions) : null }),
       h('span', { class: `ring-center ${n > 0 ? 'lit' : ''} ${g.todayDone ? 'watered' : ''}` }, icon(`st-${g.stage.id}`, 17), h('b', null, n)));
+    fertPill.replaceChildren(icon('fertilizer', 17), h('b', null, g.fertilizer));
+    fertPill.classList.toggle('empty', !g.fertilizer);
+    fertPill.setAttribute('aria-label', `${g.fertilizer} engrais en réserve : ouvrir ta plante`);
     ringBox.classList.toggle('perfect', c.perfect);
     ringBox.setAttribute('aria-label', `${g.stage.name}, ${n} jour${n > 1 ? 's' : ''} arrosé${n > 1 ? 's' : ''} d’affilée${g.fertilizer ? `, ${g.fertilizer} engrais` : ''}. Saisies ${c.done} sur ${c.items.length}${hasTraining ? `, ${wk.count} séances sur ${minSessions} cette semaine` : ''}. Ouvrir ta plante`);
     // Arrosée à l'instant : petite éclaboussure
@@ -577,7 +584,7 @@ export default function home(root, dateParam) {
 function homeTour() {
   return [
     { sel: '.ring-box', title: 'Ta graine 🌰', text: 'Chaque journée réussie l’arrose 💧 et la fait grandir : pousse à 7 jours, arbuste à 1 mois, arbre à 3 mois, chêne à 6 mois, arbre-monde à 1 an. L’anneau montre ta journée ; touche-le pour voir ta plante.' },
-    { sel: '.ring-box', title: 'L’engrais 🌾', text: 'Chaque semaine parfaite (7 jours arrosés) te donne un engrais, 3 au plus. Un jour oublié ? Un engrais le rattrape tout seul et ta plante ne fane pas. Sans engrais, elle fane et tout recommence depuis une graine.' },
+    { sel: '.fert-pill', title: 'L’engrais 🌾', text: 'Tu en as 2 pour commencer, ici. Un jour oublié ? Un engrais le rattrape tout seul et ta plante ne fane pas. Chaque semaine parfaite (7 jours arrosés) t’en redonne un, 3 au plus. Sans engrais, elle fane et repart d’une graine.' },
     { sel: '.home-page .rubric', title: 'Tes widgets', text: 'Touche un widget pour saisir ta journée. La pastille cochée indique que c’est fait ; l’icône de courbe ouvre ton suivi.' },
     { sel: '.add-widget', title: 'Crée tes widgets', text: 'Liste à cocher, oui / non, émoji, chiffre ou texte : ajoute ce que tu veux suivre, et choisis s’il arrose ta graine.' },
     { sel: '.day-label', title: 'Le calendrier', text: 'Touche la date pour voir le mois : les jours arrosés 💧 et ce que tu as noté. Les flèches passent d’un jour à l’autre.' },

@@ -56,6 +56,7 @@ const fmt = (opts) => new Intl.DateTimeFormat('fr-FR', opts);
 const F_LONG = fmt({ weekday: 'long', day: 'numeric', month: 'long' });
 const F_LONG_Y = fmt({ weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 const F_SHORT = fmt({ day: 'numeric', month: 'short' });
+const F_COMPACT = fmt({ weekday: 'short', day: 'numeric', month: 'short' });
 const F_SHORT_Y = fmt({ day: 'numeric', month: 'short', year: 'numeric' });
 const F_MONTH = fmt({ month: 'short' });
 const F_MONTH_LONG = fmt({ month: 'long', year: 'numeric' });
@@ -68,6 +69,9 @@ export function formatLong(key) {
   const sameYear = key.slice(0, 4) === todayKey().slice(0, 4);
   return cap((sameYear ? F_LONG : F_LONG_Y).format(parseKey(key)));
 }
+
+/** « Jeu. 26 nov. » (barre du haut de l'accueil). */
+export const formatCompact = (key) => cap(F_COMPACT.format(parseKey(key)));
 
 export function formatShort(key) {
   const sameYear = key.slice(0, 4) === todayKey().slice(0, 4);

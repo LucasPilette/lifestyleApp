@@ -15,6 +15,7 @@ export function growthOptions() {
     items: rules.items,
     weekly: rules.weekly,
     custom: rules.custom,
+    fertilizer: state.meta.starterFertilizer || 0, // engrais offerts à la création du compte
   };
 }
 

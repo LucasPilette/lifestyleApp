@@ -37,8 +37,9 @@ export const daysLabel = (n) => `${n} jour${n > 1 ? 's' : ''}`;
  * - Semaine terminée sous le minimum de séances (si les séances comptent) : pareil, un engrais la rattrape.
  * - Aujourd'hui (pas encore fini), la semaine en cours et la semaine de démarrage (graceUntil) ne sont jamais pénalisés.
  * - Sans critère quotidien, chaque jour depuis le démarrage est arrosé : seule la règle des séances compte.
+ * - `fertilizer` : engrais offerts au départ (2 à la création d'un compte), dans la limite de la réserve.
  */
-export function growth(days, today, { sessionDates = [], minSessions = 3, graceUntil = null, items = DEFAULT_DAILY, weekly = true, custom = {} } = {}) {
+export function growth(days, today, { sessionDates = [], minSessions = 3, graceUntil = null, items = DEFAULT_DAILY, weekly = true, custom = {}, fertilizer: gift = 0 } = {}) {
   const counts = weekSessionCounts(sessionDates);
   const graceWeek = graceUntil ? weekStart(graceUntil) : null;
   const curWeek = weekStart(today);
@@ -55,7 +56,7 @@ export function growth(days, today, { sessionDates = [], minSessions = 3, graceU
 
   let streak = 0;
   let run = 0; // jours arrosés de la série en cours (les jours rattrapés ne comptent pas)
-  let fertilizer = 0;
+  let fertilizer = Math.max(0, Math.min(FERTILIZER_MAX, Math.round(gift) || 0));
   let best = 0;
   let wilted = null; // dernier jour où la plante a fané
   let earnedAt = null; // dernier engrais gagné

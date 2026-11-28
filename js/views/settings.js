@@ -1,4 +1,4 @@
-// Réglages : objectifs, entraînement, sauvegarde des données.
+// Réglages : objectifs, entraînement, sauvegarde des données — en sous-menus dépliables.
 
 import { h, icon, numInput } from '../core/dom.js';
 import { state, updateSettings, exportData, importData, isStoragePersisted } from '../core/store.js';
@@ -12,6 +12,7 @@ import { evaluateGoal } from '../core/goals.js';
 import { editGoal, goalList } from '../components/goal-editor.js';
 import { doneSessions } from '../core/store.js';
 import { cleanWidgets } from '../core/prefs.js';
+import { foldGroup } from '../components/fold.js';
 
 export default function settingsView(root) {
   const st = state.settings;
@@ -113,45 +114,69 @@ export default function settingsView(root) {
   };
   renderGoals();
 
-  const page = h('div', { class: 'page' },
-    h('div', { class: 'list' },
-      h('button', { class: 'row', onClick: () => navigate('/profile') }, icon('user', 20),
-        h('div', { class: 'row-main' }, h('div', { class: 'row-title' }, 'Profil, thème et accueil'), h('div', { class: 'row-sub' }, 'Prénom, code ami, widgets, arrosage, routines')),
-        icon('chevron', 18, 'chev'))),
-    h('div', { class: 'section-title' }, 'Mes objectifs'),
-    goalsList,
-    h('button', { class: 'btn ghost block', onClick: () => navigate('/goals') }, icon('trophy', 18), 'Ouvrir l’onglet Objectifs (ajouter, détails)'),
-    widgets.some((w) => ['sleep', 'nutrition', 'steps', 'training'].includes(w)) ? h('div', { class: 'section-title' }, 'Objectifs quotidiens') : null,
-    h('div', { class: 'list' },
-      has('sleep') && row('Sommeil', null, stepper({ value: g.sleepMin || 480, step: 15, min: 240, max: 720, format: fmtSleep, onChange: (v) => updateSettings({ goals: { sleepMin: v } }) })),
+  // Résumés des sous-menus
+  const goalsSub = () => {
+    const ctx = { days: state.days, sessions: doneSessions(), exercises: state.exercises, today: todayKey(), custom: state.settings.customWidgets || [] };
+    const list = goalList().map((id) => evaluateGoal(id, state.settings.objectives?.[id], ctx)).filter((r) => r.def.kind !== 'unknown');
+    const met = list.filter((r) => r.status === 'met').length;
+    return list.length ? `${list.length} objectif${list.length > 1 ? 's' : ''}${met ? ` · ${met} atteint${met > 1 ? 's' : ''}` : ''}` : 'Aucun pour l’instant';
+  };
+  const dailySub = () => [
+    has('sleep') && fmtSleep(state.settings.goals.sleepMin || 480),
+    has('nutrition') && state.settings.goals.kcal && `${fmtNum(state.settings.goals.kcal)} kcal`,
+    has('steps') && state.settings.goals.steps && `${fmtNum(state.settings.goals.steps)} pas`,
+    has('training') && `${state.settings.goals.minSessions || 3} séances / sem.`,
+  ].filter(Boolean).join(' · ') || 'Sommeil, calories, pas, séances';
+  const fold = foldGroup('settings');
+  const dailyFold = widgets.some((w) => ['sleep', 'nutrition', 'steps', 'training'].includes(w)) ? fold({
+    id: 'daily', icon: 'calendar', color: 'var(--c-sleep)', title: 'Objectifs quotidiens', sub: dailySub(),
+    body: () => h('div', { class: 'list' },
+      has('sleep') && row('Sommeil', null, stepper({ value: g.sleepMin || 480, step: 15, min: 240, max: 720, format: fmtSleep, onChange: (v) => { updateSettings({ goals: { sleepMin: v } }); dailyFold.setSub(dailySub()); } })),
       has('nutrition') && row('Calories', 'Atteint à ±10 %', goalInput('kcal', 'kcal')),
       has('nutrition') && row('Protéines', 'Minimum', goalInput('prot', 'g', '72px')),
       has('steps') && row('Pas', 'Objectif du jour', goalInput('steps', 'pas')),
-      has('training') && row('Séances minimum par semaine', state.settings.flame.includes('training') ? 'En dessous, la semaine fait faner ta plante (sauf engrais)' : 'Objectif de la semaine', stepper({ value: g.minSessions || 3, step: 1, min: 1, max: 7, format: (v) => String(v), onChange: (v) => updateSettings({ goals: { minSessions: v } }) }))),
+      has('training') && row('Séances minimum par semaine', state.settings.flame.includes('training') ? 'En dessous, la semaine fait faner ta plante (sauf engrais)' : 'Objectif de la semaine', stepper({ value: g.minSessions || 3, step: 1, min: 1, max: 7, format: (v) => String(v), onChange: (v) => { updateSettings({ goals: { minSessions: v } }); dailyFold.setSub(dailySub()); } }))),
+  }) : null;
 
-    h('div', { class: 'section-title' }, 'Entraînement'),
-    h('div', { class: 'list' },
-      row('Poids de corps', 'Mis à jour par ta dernière pesée ; sert au 1RM des tractions et dips', h('div', { class: 'field-row' }, bwInput, h('span', { class: 'unit' }, 'kg'))),
-      row('Son de fin de repos', 'Se mélange à ta musique ; muet si l’iPhone est en silencieux', toggle(st.sound, (v) => updateSettings({ sound: v }), 'Son')),
-      row('Bips 3-2-1', 'Décompte avant la fin du repos', toggle(st.countdown, (v) => updateSettings({ countdown: v }), 'Décompte')),
-      row('Vibrations', 'Au toucher (iOS 18+)', toggle(st.haptics, (v) => updateSettings({ haptics: v }), 'Vibrations')),
-      row('Écran toujours allumé', 'Pendant la séance, pour voir le minuteur', toggle(st.keepAwake, (v) => updateSettings({ keepAwake: v }), 'Écran allumé')),
-      row('Repos après échauffement', null, stepper({ value: st.warmupRest ?? 60, step: 15, min: 0, max: 300, format: fmtRest, onChange: (v) => updateSettings({ warmupRest: v }) })),
-      h('button', { class: 'row', onClick: () => navigate('/programs') }, h('div', { class: 'row-main' }, h('div', { class: 'row-title' }, 'Mes séances'), h('div', { class: 'row-sub' }, `${state.templates.length} séances types`)), icon('chevron', 18, 'chev'))),
-
-    h('div', { class: 'section-title' }, 'Données'),
-    h('div', { class: 'list' },
-      h('button', { class: 'row', onClick: doExport }, icon('download', 20), h('div', { class: 'row-main' }, h('div', { class: 'row-title' }, 'Exporter une sauvegarde'), backupInfo)),
-      h('button', { class: 'row', onClick: () => fileInput.click() }, icon('upload', 20), h('div', { class: 'row-main' }, h('div', { class: 'row-title' }, 'Restaurer une sauvegarde'), h('div', { class: 'row-sub' }, 'Depuis un fichier .json')))),
-    fileInput,
-    h('p', { class: 'faint', style: { fontSize: '12.5px', margin: '0 4px', lineHeight: 1.5 } },
-      'Tes données restent sur ce téléphone. Seuls ton prénom, ton code ami, tes messages et (si tu l’actives) ton humeur du jour et ta dernière séance passent par le serveur des amis. Exporte régulièrement une sauvegarde (dans Fichiers ou iCloud Drive) pour ne rien perdre en cas de changement de téléphone : elle contient aussi l’accès à ton compte ami (amis, discussions), garde-la pour toi.'),
-
-    h('div', { class: 'section-title' }, 'À propos'),
-    h('div', { class: 'list' },
-      row('Version', null, h('span', { class: 'row-end' }, VERSION)),
-      row('Mode', null, h('span', { class: 'row-end' }, isStandalone() ? 'App installée' : 'Navigateur')),
-      row('Stockage', `${fmtNum(state.sessions.length)} séances · ${fmtNum(state.days.size)} jours`, h('span', { class: 'row-end', style: { fontSize: '12.5px' } }, persistInfo))));
+  const page = h('div', { class: 'page fold-page' },
+    h('button', { class: 'fold-head link', onClick: () => navigate('/profile') },
+      h('span', { class: 'card-icon', style: { '--c': 'var(--accent)' } }, icon('user', 18)),
+      h('span', { class: 'fold-txt' }, h('b', null, 'Profil, thème et accueil'), h('span', { class: 'fold-sub' }, 'Prénom, code ami, widgets, arrosage, routines')),
+      icon('chevron', 18, 'fold-caret')),
+    fold({
+      id: 'goals', icon: 'trophy', color: '#f5b544', title: 'Mes objectifs', sub: goalsSub(),
+      body: () => [goalsList, h('button', { class: 'btn ghost block', onClick: () => navigate('/goals') }, icon('trophy', 18), 'Ouvrir l’onglet Objectifs (ajouter, détails)')],
+    }),
+    dailyFold,
+    fold({
+      id: 'training', icon: 'dumbbell', color: '#ff7a45', title: 'Entraînement', sub: 'Minuteur, sons, poids de corps, séances',
+      body: () => h('div', { class: 'list' },
+        row('Poids de corps', 'Mis à jour par ta dernière pesée ; sert au 1RM des tractions et dips', h('div', { class: 'field-row' }, bwInput, h('span', { class: 'unit' }, 'kg'))),
+        row('Son de fin de repos', 'Se mélange à ta musique ; muet si l’iPhone est en silencieux', toggle(st.sound, (v) => updateSettings({ sound: v }), 'Son')),
+        row('Bips 3-2-1', 'Décompte avant la fin du repos', toggle(st.countdown, (v) => updateSettings({ countdown: v }), 'Décompte')),
+        row('Vibrations', 'Au toucher (iOS 18+)', toggle(st.haptics, (v) => updateSettings({ haptics: v }), 'Vibrations')),
+        row('Écran toujours allumé', 'Pendant la séance, pour voir le minuteur', toggle(st.keepAwake, (v) => updateSettings({ keepAwake: v }), 'Écran allumé')),
+        row('Repos après échauffement', null, stepper({ value: st.warmupRest ?? 60, step: 15, min: 0, max: 300, format: fmtRest, onChange: (v) => updateSettings({ warmupRest: v }) })),
+        h('button', { class: 'row', onClick: () => navigate('/programs') }, h('div', { class: 'row-main' }, h('div', { class: 'row-title' }, 'Mes séances'), h('div', { class: 'row-sub' }, `${state.templates.length} séances types`)), icon('chevron', 18, 'chev'))),
+    }),
+    fold({
+      id: 'data', icon: 'download', color: 'var(--c-steps)', title: 'Sauvegarde', sub: backupInfo.textContent,
+      body: () => [
+        h('div', { class: 'list' },
+          h('button', { class: 'row', onClick: doExport }, icon('download', 20), h('div', { class: 'row-main' }, h('div', { class: 'row-title' }, 'Exporter une sauvegarde'), backupInfo)),
+          h('button', { class: 'row', onClick: () => fileInput.click() }, icon('upload', 20), h('div', { class: 'row-main' }, h('div', { class: 'row-title' }, 'Restaurer une sauvegarde'), h('div', { class: 'row-sub' }, 'Depuis un fichier .json')))),
+        h('p', { class: 'faint', style: { fontSize: '12.5px', margin: '0 4px', lineHeight: 1.5 } },
+          'Tes données restent sur ce téléphone. Seuls ton prénom, ton code ami, tes messages et (si tu l’actives) ton humeur du jour et ta dernière séance passent par le serveur des amis. Exporte régulièrement une sauvegarde (dans Fichiers ou iCloud Drive) pour ne rien perdre en cas de changement de téléphone : elle contient aussi l’accès à ton compte ami (amis, discussions), garde-la pour toi.'),
+      ],
+    }),
+    fold({
+      id: 'about', icon: 'info', color: 'var(--text-3)', title: 'À propos', sub: `Grow ${VERSION}`,
+      body: () => h('div', { class: 'list' },
+        row('Version', null, h('span', { class: 'row-end' }, VERSION)),
+        row('Mode', null, h('span', { class: 'row-end' }, isStandalone() ? 'App installée' : 'Navigateur')),
+        row('Stockage', `${fmtNum(state.sessions.length)} séances · ${fmtNum(state.days.size)} jours`, h('span', { class: 'row-end', style: { fontSize: '12.5px' } }, persistInfo))),
+    }),
+    fileInput);
 
   root.append(h('div', { class: 'view' }, pageHeader({ title: 'Paramètres', onBack: () => back('/') }), page));
 }

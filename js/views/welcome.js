@@ -3,7 +3,7 @@
 // Pour une installation existante, tout est prérempli avec les réglages actuels et l'écran peut être passé.
 
 import { h, icon, numInput } from '../core/dom.js';
-import { state, updateSettings, markOnboarded } from '../core/store.js';
+import { state, updateSettings, markOnboarded, updateMeta } from '../core/store.js';
 import { navigate } from '../core/router.js';
 import { stepper, toast, toggle } from '../core/ui.js';
 import { WIDGETS, cleanWidgets, widgetsForFocus, focusForWidgets, defaultFlameFor } from '../core/prefs.js';
@@ -253,8 +253,10 @@ export default function welcomeView(root) {
     if (!prefill) updateSettings({ goalList: goalsFromWidgets(state.settings).goalList, objectives: goalsFromWidgets(state.settings).objectives });
     if ((d.avatar || null) !== (st.avatar || null)) setAvatar(d.avatar);
     await markOnboarded();
+    // Nouveau compte : 2 engrais offerts pour bien démarrer (visibles en haut à gauche de l'accueil).
+    if (!prefill) await updateMeta({ starterFertilizer: 2 });
     if (isConfigured()) ensureProfile({ force: true }).catch(() => {});
-    toast(prefill ? `Bienvenue ${d.name.trim()} !` : `Ta graine est plantée, ${d.name.trim()} 🌱`, { duration: 3500 });
+    toast(prefill ? `Bienvenue ${d.name.trim()} !` : `Ta graine est plantée, ${d.name.trim()} 🌱 Cadeau : 2 engrais pour bien démarrer.`, { duration: 4500 });
     navigate('/', { replace: true });
   }
 
