@@ -46,13 +46,13 @@ export default function settingsView(root) {
   });
 
   async function doExport() {
-    const data = exportData();
+    const data = await exportData();
     const json = JSON.stringify(data);
-    const name = `eclipse-sauvegarde-${todayKey()}.json`;
+    const name = `grow-sauvegarde-${todayKey()}.json`;
     const file = new File([json], name, { type: 'application/json' });
     try {
       if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: 'Sauvegarde Eclipse' });
+        await navigator.share({ files: [file], title: 'Sauvegarde Grow' });
       } else {
         const url = URL.createObjectURL(file);
         const a = h('a', { href: url, download: name });
@@ -116,7 +116,7 @@ export default function settingsView(root) {
   const page = h('div', { class: 'page' },
     h('div', { class: 'list' },
       h('button', { class: 'row', onClick: () => navigate('/profile') }, icon('user', 20),
-        h('div', { class: 'row-main' }, h('div', { class: 'row-title' }, 'Profil, thème et accueil'), h('div', { class: 'row-sub' }, 'Prénom, code ami, widgets, flamme, routines')),
+        h('div', { class: 'row-main' }, h('div', { class: 'row-title' }, 'Profil, thème et accueil'), h('div', { class: 'row-sub' }, 'Prénom, code ami, widgets, arrosage, routines')),
         icon('chevron', 18, 'chev'))),
     h('div', { class: 'section-title' }, 'Mes objectifs'),
     goalsList,
@@ -127,7 +127,7 @@ export default function settingsView(root) {
       has('nutrition') && row('Calories', 'Atteint à ±10 %', goalInput('kcal', 'kcal')),
       has('nutrition') && row('Protéines', 'Minimum', goalInput('prot', 'g', '72px')),
       has('steps') && row('Pas', 'Objectif du jour', goalInput('steps', 'pas')),
-      has('training') && row('Séances minimum par semaine', state.settings.flame.includes('training') ? 'En dessous, la semaine éteint la flamme' : 'Objectif de la semaine', stepper({ value: g.minSessions || 3, step: 1, min: 1, max: 7, format: (v) => String(v), onChange: (v) => updateSettings({ goals: { minSessions: v } }) }))),
+      has('training') && row('Séances minimum par semaine', state.settings.flame.includes('training') ? 'En dessous, la semaine fait faner ta plante (sauf engrais)' : 'Objectif de la semaine', stepper({ value: g.minSessions || 3, step: 1, min: 1, max: 7, format: (v) => String(v), onChange: (v) => updateSettings({ goals: { minSessions: v } }) }))),
 
     h('div', { class: 'section-title' }, 'Entraînement'),
     h('div', { class: 'list' },
@@ -145,7 +145,7 @@ export default function settingsView(root) {
       h('button', { class: 'row', onClick: () => fileInput.click() }, icon('upload', 20), h('div', { class: 'row-main' }, h('div', { class: 'row-title' }, 'Restaurer une sauvegarde'), h('div', { class: 'row-sub' }, 'Depuis un fichier .json')))),
     fileInput,
     h('p', { class: 'faint', style: { fontSize: '12.5px', margin: '0 4px', lineHeight: 1.5 } },
-      'Tes données restent sur ce téléphone. Seuls ton prénom, ton code ami, tes messages et (si tu l’actives) ton humeur du jour et ta dernière séance passent par le serveur des amis. Exporte régulièrement une sauvegarde (dans Fichiers ou iCloud Drive) pour ne rien perdre en cas de changement de téléphone.'),
+      'Tes données restent sur ce téléphone. Seuls ton prénom, ton code ami, tes messages et (si tu l’actives) ton humeur du jour et ta dernière séance passent par le serveur des amis. Exporte régulièrement une sauvegarde (dans Fichiers ou iCloud Drive) pour ne rien perdre en cas de changement de téléphone : elle contient aussi l’accès à ton compte ami (amis, discussions), garde-la pour toi.'),
 
     h('div', { class: 'section-title' }, 'À propos'),
     h('div', { class: 'list' },

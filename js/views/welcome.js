@@ -1,4 +1,5 @@
-// Onboarding : prénom + thème, objectifs de vie, widgets de l'accueil, objectifs chiffrés + flamme, notifications.
+// Onboarding : intro racontée (écran noir, prénom, la planète et la dernière graine), puis thème, objectifs de vie,
+// widgets de l'accueil, objectifs chiffrés + ce qui arrose la graine, notifications.
 // Pour une installation existante, tout est prérempli avec les réglages actuels et l'écran peut être passé.
 
 import { h, icon, numInput } from '../core/dom.js';
@@ -10,11 +11,13 @@ import { applyTheme } from '../core/theme.js';
 import { lastValueBefore } from '../core/metrics.js';
 import { todayKey, addDays } from '../core/date.js';
 import { parseNum } from '../core/format.js';
-import { suggestDir } from '../core/goals.js';
+import { suggestDir, goalsFromWidgets } from '../core/goals.js';
 import { addToGoalList } from '../components/goal-editor.js';
 import { themePicker, focusPicker, widgetPicker, flameToggle, habitsEditor, notificationToggle } from '../components/prefs-ui.js';
 import { isConfigured, ensureProfile, setAvatar } from '../core/social.js';
 import { avatarEl, pickAvatar } from '../components/avatar.js';
+import { logoMark } from '../components/plant.js';
+import { haptic } from '../core/feedback.js';
 
 const STEPS = 5;
 const key = (a) => JSON.stringify([...a].sort());
@@ -38,7 +41,7 @@ export default function welcomeView(root) {
     avatar: st.avatar || null,
     share: !!st.shareActivity,
   };
-  // Widgets / flamme recalculés seulement si les choix précédents ont changé.
+  // Widgets / arrosage recalculés seulement si les choix précédents ont changé.
   let widgetsFor = prefill ? key(d.focus) : null;
   let flameFor = prefill ? key(d.widgets) : null;
   let step = 0;
@@ -76,7 +79,7 @@ export default function welcomeView(root) {
   function render() {
     bar.replaceChildren(...Array.from({ length: STEPS }, (_, i) => h('i', { class: i <= step ? 'on' : '' })));
     backBtn.style.visibility = step === 0 ? 'hidden' : 'visible';
-    nextBtn.replaceChildren(step === STEPS - 1 ? 'C’est parti' : 'Continuer', icon(step === STEPS - 1 ? 'check' : 'chevron', 18));
+    nextBtn.replaceChildren(step === STEPS - 1 ? (prefill ? 'C’est parti' : 'Planter ma graine') : 'Continuer', icon(step === STEPS - 1 ? (prefill ? 'check' : 'st-sprout') : 'chevron', 18));
     body.replaceChildren(...[stepIdentity, stepFocus, stepWidgets, stepGoals, stepFinal][step]());
   }
 
@@ -108,8 +111,8 @@ export default function welcomeView(root) {
     input.addEventListener('input', () => { d.name = input.value; });
     input.addEventListener('keydown', (e) => e.key === 'Enter' && input.blur());
     return [
-      h('div', { class: 'ob-logo', 'aria-hidden': 'true' }),
-      ...title(prefill ? 'Personnalise Eclipse' : 'Bienvenue sur Eclipse', 'Ton compagnon du quotidien : sport, sommeil, nutrition, routines.'),
+      logoMark(60, 'ob-logo'),
+      ...title(prefill ? 'Personnalise Grow' : 'Bienvenue sur Grow', prefill ? 'Ton compagnon du quotidien : sport, sommeil, nutrition, routines.' : 'Ta photo, ton prénom et les couleurs de ta planète.'),
       h('label', { class: 'ob-label' }, 'Comment tu t’appelles ?'),
       h('div', { class: 'ob-identity' }, avatarPicker(), input),
       h('label', { class: 'ob-label' }, 'Choisis ton thème'),
@@ -133,11 +136,11 @@ export default function welcomeView(root) {
     ];
   }
 
-  // 4. Objectifs chiffrés + flamme
+  // 4. Objectifs chiffrés + ce qui arrose la graine
   function stepGoals() {
     const cards = d.widgets.map((id) => goalCard(id));
     return [
-      ...title('Tes objectifs', 'Fixe un objectif quand tu en as un (rien n’est obligatoire), et choisis ce que tu dois faire chaque jour pour garder ta flamme 🔥.'),
+      ...title('Tes objectifs', 'Fixe un objectif quand tu en as un (rien n’est obligatoire), et choisis ce qui arrose ta graine 💧 : ce que tu fais chaque jour pour la faire pousser.'),
       ...cards,
     ];
   }
@@ -189,7 +192,7 @@ export default function welcomeView(root) {
       const last = lastValueBefore(state.days, 'weight', addDays(todayKey(), 1));
       return [
         numField('Poids visé', 'kg', d.weightTarget, (v) => { d.weightTarget = v; }, { decimal: true, placeholder: last ? String(last.value).replace('.', ',') : '75' }),
-        h('div', { class: 'rb-hint' }, 'Pesée rappelée tous les 3 jours. Pour la flamme, une pesée de moins de 3 jours suffit.'),
+        h('div', { class: 'rb-hint' }, 'Pesée rappelée tous les 3 jours. Pour arroser ta graine, une pesée de moins de 3 jours suffit.'),
       ];
     }
     if (id === 'training') {
@@ -199,7 +202,7 @@ export default function welcomeView(root) {
     if (id === 'mood') return h('div', { class: 'rb-hint' }, 'Pas d’objectif chiffré : note simplement comment tu te sens chaque jour.');
     if (id === 'routines') {
       return [
-        h('div', { class: 'rb-hint', style: { marginTop: 0 } }, 'Tes habitudes du quotidien, à cocher chaque jour. Pour la flamme : toutes cochées.'),
+        h('div', { class: 'rb-hint', style: { marginTop: 0 } }, 'Tes habitudes du quotidien, à cocher chaque jour. Pour arroser ta graine : toutes cochées.'),
         habitsEditor({ value: d.habits, onChange: (v) => { d.habits = v; } }),
       ];
     }
@@ -219,7 +222,7 @@ export default function welcomeView(root) {
         notificationToggle(d.notifications, (v) => { d.notifications = v; })),
       h('div', { class: 'card ob-recap' },
         h('div', { class: 'ob-recap-line' }, icon('list', 18), h('span', null, h('b', null, 'Accueil : '), d.widgets.map((w) => WIDGETS[w].label).join(', '))),
-        h('div', { class: 'ob-recap-line' }, icon('flame', 18), h('span', null, h('b', null, 'Flamme : '), flameTxt.length ? flameTxt.join(' + ') : 'aucun critère')),
+        h('div', { class: 'ob-recap-line' }, icon('drop', 18), h('span', null, h('b', null, 'Arrosage : '), flameTxt.length ? flameTxt.join(' + ') : 'rien pour l’instant')),
         h('div', { class: 'ob-recap-line' }, icon('users', 18), h('span', null, h('b', null, 'Amis : '), 'ton code ami à 6 chiffres sera dans ton profil (menu ☰).'))),
       h('p', { class: 'ob-sub', style: { fontSize: '13px' } }, 'Tout se modifie ensuite dans ton profil.'),
     ];
@@ -241,26 +244,17 @@ export default function welcomeView(root) {
       notifications: { enabled: d.notifications },
       shareActivity: d.share,
     });
-    if (!prefill) {
-      // Nouveau compte : objectifs à long terme proposés selon ses choix, sans cible (à définir dans Objectifs).
-      const list = [];
-      if (d.focus.includes('diet')) list.push('weight', 'kcal');
-      if (d.focus.includes('sleep')) list.push('sleep');
-      if (d.focus.includes('sport')) list.push('bench');
-      if (d.focus.includes('activity')) list.push('avg:steps');
-      if (d.focus.includes('wellbeing')) list.push('avg:mood');
-      const unset = { target: null, dir: null, start: null, achievedAt: null };
-      updateSettings({ goalList: list, objectives: { weight: unset, kcal: unset, sleep: unset, bench: { ...unset, current: null } } });
-    }
     if (d.weightTarget != null && d.weightTarget !== st.objectives?.weight?.target) {
       const last = lastValueBefore(state.days, 'weight', addDays(todayKey(), 1));
       updateSettings({ objectives: { weight: { target: d.weightTarget, dir: suggestDir('weight', d.weightTarget, last?.value ?? null), start: last?.value ?? null, achievedAt: null } } });
-      addToGoalList('weight');
+      if (prefill) addToGoalList('weight');
     }
+    // Nouveau compte : ses objectifs sont ceux de ses widgets (sommeil visé, pas, séances par semaine, poids…).
+    if (!prefill) updateSettings({ goalList: goalsFromWidgets(state.settings).goalList, objectives: goalsFromWidgets(state.settings).objectives });
     if ((d.avatar || null) !== (st.avatar || null)) setAvatar(d.avatar);
     await markOnboarded();
     if (isConfigured()) ensureProfile({ force: true }).catch(() => {});
-    toast(`Bienvenue ${d.name.trim()} !`);
+    toast(prefill ? `Bienvenue ${d.name.trim()} !` : `Ta graine est plantée, ${d.name.trim()} 🌱`, { duration: 3500 });
     navigate('/', { replace: true });
   }
 
@@ -271,8 +265,119 @@ export default function welcomeView(root) {
   }
 
   render();
+  if (!prefill) intro();
   root.append(h('div', { class: 'view ob' },
     h('header', { class: 'ob-top' }, bar, skip),
     h('main', { class: 'page ob-page' }, body),
     h('footer', { class: 'ob-foot' }, backBtn, nextBtn)));
+
+  /**
+   * Intro : écran noir, « Bonjour. », le prénom, puis l'histoire de la planète et de la dernière graine.
+   * Toucher l'écran accélère le texte. Mouvements réduits : texte affiché d'un coup.
+   */
+  function intro() {
+    const box = h('div', { class: 'ob-intro', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Bienvenue sur Grow' });
+    const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let fast = false;
+    box.addEventListener('click', (e) => { if (!e.target.closest('input, button')) fast = true; });
+    const wait = (ms) => new Promise((res) => {
+      const t0 = Date.now();
+      const tick = () => (fast || calm || Date.now() - t0 >= ms ? res() : setTimeout(tick, 40));
+      tick();
+    });
+    const type = async (el, text, speed = 42) => {
+      el.classList.add('typing');
+      for (let i = 1; i <= text.length; i++) {
+        if (fast || calm) { el.textContent = text; break; }
+        el.textContent = text.slice(0, i);
+        await new Promise((r) => setTimeout(r, text[i - 1] === '.' || text[i - 1] === ',' ? speed * 5 : speed));
+      }
+      el.classList.remove('typing');
+      fast = false;
+    };
+
+    async function hello() {
+      const title = h('h1', { class: 'oi-hello' });
+      const ask = h('p', { class: 'oi-ask' });
+      const input = h('input', {
+        class: 'oi-input', type: 'text', value: d.name, placeholder: 'Ton prénom', maxlength: 40,
+        autocomplete: 'given-name', autocapitalize: 'words', enterkeyhint: 'next', 'aria-label': 'Ton prénom',
+      });
+      const go = h('button', { class: 'oi-go', type: 'submit', 'aria-label': 'Continuer', disabled: !d.name.trim() }, icon('chevron', 24));
+      const form = h('form', { class: 'oi-form', hidden: true }, input, go);
+      input.addEventListener('input', () => { go.disabled = !input.value.trim(); });
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        if (!input.value.trim()) return;
+        d.name = input.value.trim().slice(0, 40);
+        input.blur();
+        story();
+      });
+      box.replaceChildren(h('div', { class: 'oi-center' }, title, ask, form));
+      await wait(700);
+      await type(title, 'Bonjour.', 110);
+      await wait(900);
+      await type(ask, 'Quel est ton nom ?');
+      form.hidden = false;
+    }
+
+    async function story() {
+      const lines = [
+        `Enchanté, ${d.name}.`,
+        'Loin d’ici, une planète dort depuis des millénaires. Plus rien n’y pousse.',
+        'Un jour, l’espace y a déposé une graine. La toute dernière.',
+        'Elle seule peut y faire renaître la vie. Mais elle ne poussera pas sans toi.',
+        'Chaque journée que tu réussis l’arrose. Aide-nous à la faire pousser.',
+      ];
+      const scene = h('div', { class: 'oi-scene', 'aria-hidden': 'true' }, introScene());
+      const text = h('div', { class: 'oi-story', 'aria-live': 'polite' });
+      const plant = h('button', { class: 'btn primary oi-plant', hidden: true, onClick: done }, icon('st-sprout', 18), 'Planter la graine');
+      box.replaceChildren(scene, text, plant);
+      await wait(400);
+      for (const [i, line] of lines.entries()) {
+        const p = h('p', { class: `oi-line ${i === 0 ? 'first' : ''}` });
+        text.append(p);
+        if (i === 2) scene.classList.add('seed-lands');
+        await type(p, line, 34);
+        await wait(i === 0 ? 700 : 1100);
+      }
+      plant.hidden = false;
+    }
+
+    function done() {
+      haptic();
+      box.classList.add('leaving');
+      setTimeout(() => { box.remove(); render(); }, calm ? 0 : 700);
+    }
+
+    root.append(box);
+    hello();
+  }
+}
+
+/** Décor de l'intro : étoiles, la graine qui tombe et l'horizon de la planète endormie. */
+function introScene() {
+  const t = document.createElement('template');
+  const stars = [[30, 40, 1.6], [80, 18, 1.1], [130, 60, 1.4], [200, 26, 1.2], [262, 70, 1.6], [240, 132, 1], [52, 120, 1.2], [180, 104, 0.9], [110, 140, 1]]
+    .map(([x, y, r], i) => `<circle cx="${x}" cy="${y}" r="${r}" fill="#fff" class="oi-star" style="animation-delay:${i * 0.37}s"/>`).join('');
+  t.innerHTML = `<svg viewBox="0 0 300 260" class="oi-svg" preserveAspectRatio="xMidYMax slice">
+    <defs>
+      <linearGradient id="oiSeed" x1="0.1" y1="0" x2="0.9" y2="1"><stop offset="0" stop-color="#ffd98a"/><stop offset="0.5" stop-color="#ff8a52"/><stop offset="1" stop-color="#e3436b"/></linearGradient>
+      <radialGradient id="oiGlow" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#ff8a52" stop-opacity="0.55"/><stop offset="1" stop-color="#ff8a52" stop-opacity="0"/></radialGradient>
+      <linearGradient id="oiPlanet" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1c1838"/><stop offset="1" stop-color="#07060f"/></linearGradient>
+      <linearGradient id="oiFade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000"/></linearGradient>
+    </defs>
+    ${stars}
+    <g class="oi-seed">
+      <circle cx="150" cy="176" r="44" fill="url(#oiGlow)" class="oi-glow"/>
+      <g transform="translate(150 178) scale(0.17) rotate(30)">
+        <path d="M0 -104C66 -60 68 46 0 100C-68 46 -66 -60 0 -104Z" fill="url(#oiSeed)"/>
+        <path d="M0 -80C14 -30 14 30 0 78" fill="none" stroke="#fff3d9" stroke-opacity="0.55" stroke-width="12" stroke-linecap="round"/>
+      </g>
+    </g>
+    <ellipse cx="150" cy="420" rx="290" ry="220" fill="url(#oiPlanet)"/>
+    <ellipse cx="150" cy="420" rx="290" ry="220" fill="none" stroke="#ff8a52" stroke-opacity="0.45" stroke-width="1.5" class="oi-rim"/>
+    <rect x="-200" y="212" width="700" height="50" fill="url(#oiFade)"/>
+  </svg>`;
+  return t.content.firstElementChild;
 }

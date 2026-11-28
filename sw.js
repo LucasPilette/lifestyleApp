@@ -2,7 +2,7 @@
 // Le bloc ci-dessous est régénéré par `node tools/release.mjs` à chaque publication.
 
 // <generated>
-const VERSION = '2026.11.28-f964517';
+const VERSION = '2026.11.28-3652ecc';
 const ASSETS = [
   "./",
   "./css/app.css",
@@ -10,12 +10,14 @@ const ASSETS = [
   "./icons/icon-192.png",
   "./icons/icon-512-maskable.png",
   "./icons/icon-512.png",
+  "./icons/logo.svg",
   "./index.html",
   "./js/components/avatar.js",
   "./js/components/calendar.js",
   "./js/components/chart.js",
   "./js/components/exercise-picker.js",
   "./js/components/goal-editor.js",
+  "./js/components/plant.js",
   "./js/components/prefs-ui.js",
   "./js/components/ring.js",
   "./js/components/session-editor.js",
@@ -31,7 +33,9 @@ const ASSETS = [
   "./js/core/format.js",
   "./js/core/goals.js",
   "./js/core/greeting.js",
+  "./js/core/growth.js",
   "./js/core/metrics.js",
+  "./js/core/plant-state.js",
   "./js/core/prefs.js",
   "./js/core/program.js",
   "./js/core/push.js",
@@ -112,7 +116,7 @@ self.addEventListener('push', (event) => {
   } catch {
     data = { body: event.data ? event.data.text() : '' };
   }
-  event.waitUntil(self.registration.showNotification(data.title || 'Eclipse', {
+  event.waitUntil(self.registration.showNotification(data.title || 'Grow', {
     body: data.body || '',
     tag: data.tag || undefined,
     renotify: !!data.tag,

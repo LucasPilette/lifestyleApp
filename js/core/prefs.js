@@ -5,7 +5,7 @@
 export const THEMES = {
   spring: { label: 'Spring', sub: 'Vert citron, énergie santé', dark: '#0e130f', light: '#f3f8ec', accent: '#b8f02a', accent2: '#3fcf6e' },
   summer: { label: 'Summer', sub: 'Rose sakura', dark: '#150f15', light: '#fdf2f6', accent: '#ff5f9e', accent2: '#ffa3c7' },
-  fall: { label: 'Fall', sub: 'Rouge éclipse', dark: '#0f1119', light: '#fbf3f0', accent: '#ff3b4a', accent2: '#ff7a45' },
+  fall: { label: 'Fall', sub: 'Rouge couchant', dark: '#0f1119', light: '#fbf3f0', accent: '#ff3b4a', accent2: '#ff7a45' },
   winter: { label: 'Winter', sub: 'Sobre : noir, blanc et bleu', dark: '#08090c', light: '#f3f5f9', accent: '#3d8bff', accent2: '#8cc0ff' },
 };
 export const THEME_IDS = Object.keys(THEMES);

@@ -5,7 +5,9 @@ import { isConfigured, rpc, rest, invoke, accessToken, userId, uploadFile } from
 import { state, doneSessions, updateSettings } from './store.js';
 import { todayKey, dateKey } from './date.js';
 import { debounce } from './util.js';
-import { flameChecker, perfectStreak, dayChecklist, weekTraining } from './metrics.js';
+import { dayChecklist, weekTraining } from './metrics.js';
+import { growth } from './growth.js';
+import { todoItems, frenchList } from './greeting.js';
 import { flameRules } from './prefs.js';
 
 export { isConfigured };
@@ -182,7 +184,7 @@ let lastPushed = null;
 const notified = new Set(); // événements déjà signalés pendant cette session (le serveur dédoublonne aussi)
 
 /**
- * Flamme du jour : journée parfaite ou non, série en cours, et ce qu'il reste à faire (pour le rappel du soir).
+ * Plante du jour : arrosée ou non, jours arrosés d'affilée, et ce qu'il reste à faire (pour le rappel du soir).
  * null si l'utilisateur n'a aucun critère quotidien.
  */
 function flameToday(today) {
@@ -195,12 +197,14 @@ function flameToday(today) {
     graceUntil: state.meta.createdAt ? dateKey(new Date(state.meta.createdAt)) : null,
     items: rules.items, weekly: rules.weekly, custom: rules.custom,
   };
-  const todo = dayChecklist(state.days, today, rules.items, rules.custom).missing;
+  // Ce qu'il reste, en toutes lettres pour le rappel : « ta nuit et ton humeur », « 2 séances d’ici dimanche »
+  const todo = todoItems(dayChecklist(state.days, today, rules.items, rules.custom));
   if (rules.weekly) {
     const wk = weekTraining(sessionDates, today, minSessions);
     if (wk.needed > 0 && wk.needed >= wk.daysLeft) todo.push(`${wk.needed} séance${wk.needed > 1 ? 's' : ''} d’ici dimanche`);
   }
-  return { perfect: flameChecker(state.days, today, opts)(today), streak: perfectStreak(state.days, today, opts), todo };
+  const g = growth(state.days, today, opts);
+  return { perfect: g.todayDone, streak: g.streak, todo };
 }
 
 function statusPayload() {
@@ -224,12 +228,12 @@ function statusPayload() {
     // Journée parfaite et série : visibles par les amis seulement si share (voir my_friends).
     perfect_date: flame?.perfect ? today : null,
     streak: flame?.perfect ? flame.streak : null,
-    // Rappel du soir (privé) : heure choisie, fuseau, flamme en jeu et ce qu'il reste à faire.
+    // Rappel du soir (privé) : heure choisie, fuseau, jours arrosés d'affilée et ce qu'il reste à faire.
     tz,
     remind_hour: n.enabled && flame && n.reminderHour != null ? n.reminderHour : null,
     flame: flame ? flame.streak : null,
     flame_date: flame ? today : null,
-    todo: flame ? flame.todo.join(', ').slice(0, 200) || null : null,
+    todo: flame ? frenchList(flame.todo).slice(0, 200) || null : null,
     todo_date: flame ? today : null,
   };
 }

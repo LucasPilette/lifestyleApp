@@ -1,4 +1,4 @@
-// Feuille « Partager » de la discussion : flamme, objectifs, records, dernière séance, valeurs du jour.
+// Feuille « Partager » de la discussion : plante, objectifs, records, séances, graphiques, valeurs du jour.
 
 import { h, icon } from '../core/dom.js';
 import { toast } from '../core/ui.js';
@@ -7,9 +7,9 @@ import { listFriends, listGroups, sendMessage, sendGroupMessage, isConfigured } 
 import { state, doneSessions, getDay, sessionColor } from '../core/store.js';
 import { sheet } from '../core/ui.js';
 import { todayKey, dateKey, relativeDay } from '../core/date.js';
-import { perfectStreak } from '../core/metrics.js';
+import { myGrowth } from '../core/plant-state.js';
 import { flameRules, cleanWidgets } from '../core/prefs.js';
-import { flameCard, goalCard, recentRecords, recordCard, sessionCard, dayCards, cleanCard, chartCard, templateCard, programCard } from '../core/share.js';
+import { plantCard, goalCard, recentRecords, recordCard, sessionCard, dayCards, cleanCard, chartCard, templateCard, programCard } from '../core/share.js';
 import { openCardDetail } from './share-detail.js';
 import { mountChart } from './chart.js';
 import { METRICS } from '../core/metrics.js';
@@ -114,17 +114,6 @@ export function openSendToSheet(item, { title = 'Partager avec…' } = {}) {
   }, { title });
 }
 
-/** Série de flammes en cours, selon les critères de l'utilisateur. */
-export function myStreak() {
-  const rules = flameRules(state.settings);
-  return perfectStreak(state.days, todayKey(), {
-    sessionDates: doneSessions().map((s) => dateKey(new Date(s.startedAt))),
-    minSessions: state.settings.goals.minSessions || 3,
-    graceUntil: state.meta.createdAt ? dateKey(new Date(state.meta.createdAt)) : null,
-    items: rules.items, weekly: rules.weekly, custom: rules.custom,
-  });
-}
-
 /** Ouvre la feuille ; onPick({ payload, body }) quand l'utilisateur choisit une carte. */
 export function openShareSheet(onPick) {
   sheet((close) => {
@@ -160,7 +149,7 @@ export function openShareSheet(onPick) {
     if (state.templates.length > 1) tpls.unshift(programCard(state.templates, state.exercises, state.settings.name));
 
     const items = [
-      ...section('Ma flamme', [flameCard(myStreak())]),
+      ...section('Ma plante', [plantCard(myGrowth())]),
       ...section('Aujourd’hui', today),
       ...section('Mes objectifs', goals),
       ...section('Mes records', records),

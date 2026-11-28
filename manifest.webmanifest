@@ -1,13 +1,13 @@
 {
-  "name": "Eclipse",
-  "short_name": "Eclipse",
-  "description": "Ton compagnon quotidien : sommeil, nutrition, pas et musculation.",
+  "name": "Grow",
+  "short_name": "Grow",
+  "description": "Fais pousser ta graine en réussissant tes journées : sommeil, nutrition, sport, routines et amis.",
   "lang": "fr",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0B0D10",
+  "background_color": "#0B0A1C",
   "theme_color": "#0B0D10",
   "icons": [
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },

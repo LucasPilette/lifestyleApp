@@ -13,19 +13,91 @@
 
 import { addDays, dateKey } from './date.js';
 import { avgBetween, dayChecklist } from './metrics.js';
-import { WIDGETS, customDone } from './prefs.js';
+import { WIDGETS, customDone, cleanWidgets } from './prefs.js';
 import { exerciseHistory, e1rm } from './training.js';
 import { fmtNum, fmtSleep, fmtKg } from './format.js';
 
 export const BENCH_ID = 'bench';
-export const DEFAULT_GOAL_LIST = ['weight', 'sleep', 'bench', 'kcal'];
-
-export const DEFAULT_OBJECTIVES = {
+// Nouveau compte : aucun objectif imposé, ils viennent des objectifs de ses widgets (voir goalsFromWidgets).
+export const DEFAULT_GOAL_LIST = [];
+export const DEFAULT_OBJECTIVES = {};
+// Objectifs de l'installation d'origine (avant l'onboarding), conservés pour elle seule.
+export const LEGACY_GOAL_LIST = ['weight', 'sleep', 'bench', 'kcal'];
+export const LEGACY_OBJECTIVES = {
   weight: { target: null, dir: null, start: null, achievedAt: null },
   sleep: { target: 450, dir: 'min', start: null, achievedAt: null },
   bench: { target: 150, dir: 'min', start: 147, current: 147, achievedAt: null },
   kcal: { target: 2600, dir: 'min', start: null, achievedAt: null },
 };
+
+// --- Objectifs tirés des widgets -------------------------------------------------------
+// Chaque widget qui a un objectif (sommeil 8 h, 10 000 pas, 3 séances / semaine, 8 verres d'eau…) donne un
+// objectif à long terme : la moyenne sur 30 jours (4 semaines pour les séances) doit l'atteindre.
+
+/** Objectifs des widgets affichés : clé d'objectif -> { target, dir }, dans l'ordre de l'accueil. */
+export function widgetTargets(settings = {}) {
+  const custom = settings.customWidgets || [];
+  const widgets = cleanWidgets(settings.widgets, custom);
+  const g = settings.goals || {};
+  const out = new Map();
+  const add = (key, target, dir) => { if (typeof target === 'number' && target > 0) out.set(key, { target, dir }); };
+  for (const w of widgets) {
+    if (w === 'weight') {
+      const o = settings.objectives?.weight;
+      if (o?.target != null) out.set('weight', { target: o.target, dir: o.dir || 'min' });
+    } else if (w === 'sleep') add('sleep', g.sleepMin, 'min');
+    else if (w === 'nutrition') {
+      // Calories : « au plus » quand le poids visé est en dessous du poids actuel (perte de poids), sinon « au moins ».
+      add('kcal', g.kcal, settings.objectives?.weight?.dir === 'max' ? 'max' : 'min');
+      add('avg:prot', g.prot, 'min');
+    } else if (w === 'steps') add('avg:steps', g.steps, 'min');
+    else if (w === 'training') add('sessions', g.minSessions, 'min');
+    else {
+      const c = custom.find((x) => x.id === w);
+      if (c?.kind === 'number') add(`cavg:${c.id}`, c.target, c.dir === 'max' ? 'max' : 'min');
+    }
+  }
+  return out;
+}
+
+/** Liste d'objectifs d'un nouveau compte : ceux de ses widgets. */
+export function goalsFromWidgets(settings = {}) {
+  const targets = widgetTargets(settings);
+  const objectives = {};
+  for (const [key, t] of targets) {
+    objectives[key] = key === 'weight' ? { ...settings.objectives.weight } : { target: t.target, dir: t.dir, start: null, achievedAt: null };
+  }
+  return { goalList: [...targets.keys()], objectives };
+}
+
+/**
+ * Après un changement de réglages : les objectifs suivent ceux des widgets.
+ * - objectif d'un widget modifié, resté sur l'ancienne valeur du widget : il prend la nouvelle ;
+ * - widget qui reçoit un objectif (ou widget ajouté avec un objectif) : l'objectif apparaît ;
+ * un objectif réglé à la main dans Objectifs (valeur différente) n'est jamais touché.
+ * @returns {object|null} morceau de réglages à fusionner
+ */
+export function followWidgetTargets(prev = {}, next = {}) {
+  const before = widgetTargets(prev);
+  const after = widgetTargets(next);
+  const list = next.goalList || [];
+  const added = [];
+  const objectives = {};
+  for (const [key, t] of after) {
+    if (key === 'weight') continue; // réglé dans l'onboarding ou dans Objectifs, directement
+    const old = before.get(key);
+    if (old && old.target === t.target && old.dir === t.dir) continue;
+    const cfg = next.objectives?.[key];
+    if (list.includes(key)) {
+      if (cfg?.target == null || (old && cfg.target === old.target)) objectives[key] = { target: t.target, dir: t.dir, achievedAt: null };
+    } else if (!old) {
+      added.push(key);
+      objectives[key] = { target: t.target, dir: t.dir, start: null, achievedAt: null };
+    }
+  }
+  if (!added.length && !Object.keys(objectives).length) return null;
+  return { ...(added.length ? { goalList: [...list, ...added] } : {}), objectives };
+}
 
 const kg = (v) => `${fmtKg(Math.round(v * 2) / 2)} kg`;
 const kilo = (v) => (v >= 1000 ? `${fmtNum(v / 1000, 1)}k` : fmtNum(Math.round(v)));

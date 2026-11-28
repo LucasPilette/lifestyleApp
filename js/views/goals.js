@@ -143,6 +143,8 @@ export default function goalsView(root) {
     h('div', { class: 'view' },
       pageHeader({ title: 'Objectifs', onBack: () => back('/') }),
       h('div', { class: 'page' },
-        h('p', { class: 'muted', style: { fontSize: '13.5px', margin: '0 4px' } }, 'Calculés à partir de tes données. Touche un objectif pour le détail.'),
+        h('p', { class: 'muted', style: { fontSize: '13.5px', margin: '0 4px' } }, goalList().length
+          ? 'Calculés à partir de tes données. Touche un objectif pour le détail.'
+          : 'Donne un objectif à un widget (sommeil visé, pas par jour, verres d’eau…) et il apparaîtra ici. Ou crée-en un avec « + ».'),
         grid)));
 }

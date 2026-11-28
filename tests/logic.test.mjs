@@ -587,9 +587,12 @@ test('objectifs sur widgets : moyenne, dernière valeur, régularité, propositi
 
 test('cartes partagées : flamme, record, valeurs du jour, nettoyage', async () => {
   const sh = await import('../js/core/share.js');
-  assert.equal(sh.flameCard(12).payload.value, '12 jours d’affilée');
-  assert.equal(sh.flameCard(1).body, '🔥 Ma flamme : 1 jour d’affilée (et ça continue)');
-  assert.equal(sh.flameCard(0).payload.value, 'à rallumer aujourd’hui');
+  assert.equal(sh.plantCard(12).payload.value, '12 jours d’affilée');
+  assert.equal(sh.plantCard(12).payload.title, 'Ma pousse');
+  assert.equal(sh.plantCard(45).payload.title, 'Mon arbuste');
+  assert.equal(sh.plantCard(1).body, '🌰 Ma graine : 1 jour d’affilée (pousse dans 6 jours)');
+  assert.equal(sh.plantCard(0).payload.value, 'à arroser aujourd’hui');
+  assert.equal(sh.plantCard(400).payload.sub, 'la vie est revenue 🌍');
   // Record : séance après une première séance de référence
   const s1 = done('upper-a', new Date(2026, 10, 20, 18).getTime(), { bench: [[100, 5]] });
   const s2 = done('upper-a', new Date(2026, 10, 24, 18).getTime(), { bench: [[105, 5]] });
@@ -693,25 +696,100 @@ test('graphique partagé : 7 jours de sommeil', async () => {
   assert.equal(sh.cleanCard({ type: 'chart', chart: { field: 'x', values: ['a', null] } }).chart, undefined);
 });
 
-test('phrase d’accueil : naturelle selon l’heure, le reste à faire, la flamme et les séances', async () => {
-  const { greetingMessage, frenchList } = await import('../js/core/greeting.js');
+test('phrase d’accueil : naturelle selon l’heure, le reste à faire, la plante et les séances', async () => {
+  const { greetingMessage, frenchList, todoText } = await import('../js/core/greeting.js');
+  const { STAGES } = await import('../js/core/growth.js');
+  const [seed, sprout, shrub] = STAGES;
   const today = '2026-11-27';
   const items = ['sleep', 'nutrition', 'mood'];
   const c = (day) => dayChecklist(new Map([[today, day]]), today, items);
   assert.equal(frenchList(['a', 'b', 'c']), 'a, b et c');
+  assert.equal(todoText(c({ mood: 3 })), 'ta nuit et tes repas');
   assert.equal(greetingMessage(c({}), true, null, { hour: 8 }), 'Bien dormi ? Commence par noter ta nuit.');
   assert.equal(greetingMessage(c({}), true, null, { hour: 14 }), 'Quand tu as une minute, note ta nuit, tes repas et ton humeur.');
-  assert.equal(greetingMessage(c({}), true, null, { hour: 21 }), 'Prends une minute pour noter ta nuit, tes repas et ton humeur 🌙');
-  assert.equal(greetingMessage(c({ sleepMin: 420, sleepQ: 4 }), true, null, { hour: 14 }), 'Encore tes repas et ton humeur pour une journée parfaite.');
-  assert.equal(greetingMessage(c({ sleepMin: 420, sleepQ: 4, mood: 4 }), true, null, { hour: 14 }), 'Plus que tes repas pour une journée parfaite.');
-  assert.equal(greetingMessage(c({ sleepMin: 420, sleepQ: 4, mood: 4 }), true, null, { hour: 21 }), 'Plus que tes repas et ta journée est parfaite 🌙');
+  assert.equal(greetingMessage(c({}), true, null, { hour: 21, stage: sprout }), 'Ta pousse a soif 💧 Note ta nuit, tes repas et ton humeur pour l’arroser.');
+  assert.equal(greetingMessage(c({ sleepMin: 420, sleepQ: 4 }), true, null, { hour: 14, stage: shrub }), 'Encore tes repas et ton humeur pour arroser ton arbuste.');
+  assert.equal(greetingMessage(c({ sleepMin: 420, sleepQ: 4, mood: 4 }), true, null, { hour: 14 }), 'Plus que tes repas pour arroser ta graine.');
+  assert.equal(greetingMessage(c({ sleepMin: 420, sleepQ: 4, mood: 4 }), true, null, { hour: 21, stage: sprout }), 'Plus que tes repas pour arroser ta pousse 🌙');
   const full = { sleepMin: 420, sleepQ: 4, mood: 4, kcal: 2400, prot: 150 };
-  assert.equal(greetingMessage(c(full), true, null, { streak: 12 }), '12 jours d’affilée, ta flamme brille 🔥');
-  assert.equal(greetingMessage(c(full), true, null, { streak: 1 }), 'Journée parfaite, ta flamme est allumée 🔥');
+  assert.equal(greetingMessage(c(full), true, null, { streak: 12, stage: sprout, next: shrub, toNext: 18 }), '12 jours d’affilée, ta pousse grandit 💧');
+  assert.equal(greetingMessage(c(full), true, null, { streak: 1, stage: seed, next: sprout, toNext: 6 }), 'Journée réussie, ta graine est arrosée 💧');
+  assert.equal(greetingMessage(c(full), true, null, { streak: 28, stage: sprout, next: shrub, toNext: 2 }), 'Ta pousse devient un arbuste dans 2 jours 🌱');
   // Séances de la semaine
-  assert.equal(greetingMessage(c(full), true, { needed: 1, daysLeft: 4 }, { streak: 3 }), '3 jours d’affilée, ta flamme brille 🔥 Encore une séance cette semaine et ta flamme est à l’abri.');
-  assert.equal(greetingMessage(c(full), true, { needed: 2, daysLeft: 2 }, { streak: 1 }), 'Journée parfaite, ta flamme est allumée 🔥 Il te faut encore 2 séances d’ici dimanche pour garder ta flamme.');
+  assert.equal(greetingMessage(c(full), true, { needed: 1, daysLeft: 4 }, { streak: 3, stage: seed, next: sprout, toNext: 4 }),
+    '3 jours d’affilée, ta graine grandit 💧 Encore une séance cette semaine et ta graine sera à l’abri.');
+  assert.equal(greetingMessage(c(full), true, { needed: 2, daysLeft: 2 }, { streak: 40, stage: shrub, next: STAGES[3], toNext: 50 }),
+    '40 jours d’affilée, ton arbuste grandit 💧 Il te faut encore 2 séances d’ici dimanche pour ton arbuste.');
   // Jour passé, sans critère quotidien
   assert.equal(greetingMessage(c({ mood: 3 }), false, null), 'Ce jour-là, il manquait ta nuit et tes repas.');
   assert.equal(greetingMessage(dayChecklist(new Map(), today, []), true, null), 'Belle journée à toi ✨');
+});
+
+test('objectifs tirés des widgets : défauts d’un nouveau compte et suivi des changements', async () => {
+  const g = await import('../js/core/goals.js');
+  assert.deepEqual(g.DEFAULT_GOAL_LIST, []);
+  assert.deepEqual(g.DEFAULT_OBJECTIVES, {});
+  const water = { id: 'cw_eau', kind: 'number', name: 'Eau', unit: 'verres', target: 8, dir: 'min' };
+  const settings = {
+    widgets: ['sleep', 'mood', 'nutrition', 'steps', 'training', 'cw_eau'],
+    customWidgets: [water],
+    goals: { sleepMin: 480, kcal: 2200, prot: null, steps: 8000, minSessions: 3 },
+    objectives: { weight: { target: 72, dir: 'max', start: 78 } },
+  };
+  const d = g.goalsFromWidgets(settings);
+  // Humeur (sans objectif) et poids (widget non affiché) absents ; calories « au plus » car le poids visé baisse
+  assert.deepEqual(d.goalList, ['sleep', 'kcal', 'avg:steps', 'sessions', 'cavg:cw_eau']);
+  assert.deepEqual([d.objectives.sleep.target, d.objectives.kcal.dir, d.objectives['avg:steps'].target, d.objectives.sessions.target, d.objectives['cavg:cw_eau'].target], [480, 'max', 8000, 3, 8]);
+  assert.ok(!d.goalList.includes('bench'));
+  assert.deepEqual(g.goalsFromWidgets({ ...settings, widgets: ['weight', 'mood'] }).goalList, ['weight']);
+  // Suivi : objectif resté sur la valeur du widget -> il suit ; réglé à la main -> intact
+  const next = { ...settings, goalList: d.goalList, objectives: { ...d.objectives, 'avg:steps': { target: 12000, dir: 'min' } } };
+  const follow = g.followWidgetTargets(next, { ...next, goals: { ...next.goals, sleepMin: 450, steps: 9000 } });
+  assert.deepEqual(Object.keys(follow.objectives), ['sleep']);
+  assert.equal(follow.objectives.sleep.target, 450);
+  assert.equal(follow.goalList, undefined);
+  // Widget qui reçoit un objectif : il apparaît dans la liste
+  const add = g.followWidgetTargets(next, { ...next, goals: { ...next.goals, prot: 140 } });
+  assert.deepEqual(add.goalList, [...d.goalList, 'avg:prot']);
+  assert.equal(add.objectives['avg:prot'].target, 140);
+  // Rien ne change -> null
+  assert.equal(g.followWidgetTargets(next, { ...next, theme: 'winter' }), null);
+});
+
+test('Grow : la graine pousse, gagne des engrais et fane sans eux', async () => {
+  const gr = await import('../js/core/growth.js');
+  const { addDays } = await import('../js/core/date.js');
+  const today = '2026-11-27';
+  // Humeur seule comme critère ; `pattern` : du plus ancien à aujourd'hui, 1 = renseignée
+  const run = (pattern, extra = {}) => {
+    const days = new Map();
+    [...pattern].forEach((c, i) => { if (c === '1') days.set(addDays(today, -(pattern.length - 1 - i)), { mood: 4 }); });
+    return gr.growth(days, today, { items: ['mood'], weekly: false, ...extra });
+  };
+  assert.deepEqual([0, 6, 7, 29, 30, 89, 90, 180, 364, 365].map((n) => gr.stageOf(n).id), ['seed', 'seed', 'sprout', 'sprout', 'shrub', 'shrub', 'tree', 'oak', 'oak', 'world']);
+  let g = run('1111111111');
+  assert.deepEqual([g.streak, g.stage.name, g.fertilizer, g.next.name, g.toNext, g.todayDone], [10, 'Pousse', 1, 'Arbuste', 20, true]);
+  // Aujourd'hui pas encore renseigné : jamais pénalisé
+  g = run('11111111110');
+  assert.deepEqual([g.streak, g.fertilizer, g.todayDone], [10, 1, false]);
+  // Un jour oublié après une semaine parfaite : l'engrais le rattrape
+  g = run('1111111' + '0' + '111');
+  assert.deepEqual([g.streak, g.fertilizer, g.saved.size], [10, 0, 1]);
+  // Sans engrais : la plante fane, nouvelle graine
+  g = run('111111' + '0' + '11');
+  assert.deepEqual([g.streak, g.stage.id, g.best, g.wilted], [2, 'seed', 6, addDays(today, -2)]);
+  // Deux oublis d'affilée avec un seul engrais : le second fait faner
+  g = run('1111111' + '00' + '1');
+  assert.deepEqual([g.streak, g.saved.size], [1, 1]);
+  // Réserve plafonnée à 3
+  g = run('1'.repeat(35));
+  assert.deepEqual([g.fertilizer, g.nextFertilizer, g.stage.name], [3, null, 'Arbuste']);
+  // Séances : semaine terminée sous le minimum rattrapée par un engrais
+  const days = new Map();
+  for (let i = 0; i < 20; i++) days.set(addDays(today, -i), { mood: 4 });
+  const sessionDates = [];
+  for (let w = 1; w <= 3; w++) for (let s = 0; s < 3; s++) sessionDates.push(addDays('2026-11-23', -7 * w + s)); // 3 semaines passées complètes
+  sessionDates.splice(0, 2); // semaine du 16 : une seule séance
+  g = gr.growth(days, today, { items: ['mood'], weekly: true, minSessions: 3, sessionDates });
+  assert.deepEqual([g.streak, g.savedWeeks.has('2026-11-16')], [20, true]);
 });

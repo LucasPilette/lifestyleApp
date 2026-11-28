@@ -1,4 +1,4 @@
-// Calendrier du mois (ouvert en touchant la date de l'accueil) : flamme des jours parfaits,
+// Calendrier du mois (ouvert en touchant la date de l'accueil) : goutte des jours arrosés, engrais des jours rattrapés,
 // pastilles des données saisies aux couleurs des rubriques, toucher un jour pour l'ouvrir.
 
 import { h, icon } from '../core/dom.js';
@@ -25,11 +25,12 @@ const WEEKDAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
  * @param {string} o.today
  * @param {string[]} [o.widgets] widgets affichés à l'accueil (pastilles et légende limitées à ceux-ci)
  * @param {object[]} [o.customs] widgets personnalisés (une pastille chacun, à leur couleur)
- * @param {(key: string) => boolean} o.isFlame
+ * @param {(key: string) => boolean} o.isWatered jour arrosé (réussi)
+ * @param {(key: string) => boolean} [o.isSaved] jour oublié rattrapé par un engrais
  * @param {Map<string, {count: number, color: string|null}>} o.sessionDays séances terminées par jour
  * @param {(key: string) => void} o.onPick
  */
-export function openCalendar({ selected, today, widgets, customs = [], isFlame, sessionDays, onPick }) {
+export function openCalendar({ selected, today, widgets, customs = [], isWatered, isSaved = () => false, sessionDays, onPick }) {
   const dotsShown = [
     ...DOTS.filter((d) => !widgets || widgets.includes(d.id)),
     ...customs.filter((c) => !widgets || widgets.includes(c.id)).map((c) => ({ id: c.id, label: c.name, c: c.color, custom: true })),
@@ -61,7 +62,8 @@ export function openCalendar({ selected, today, widgets, customs = [], isFlame, 
     for (let k = month; k <= end; k = addDays(k, 1)) {
       const entries = dayEntries(state.days.get(k));
       const trained = sessionDays.get(k);
-      const lit = isFlame(k);
+      const lit = isWatered(k);
+      const saved = !lit && isSaved(k);
       const future = k > today;
       if (lit) flames++;
       if (trained && dotsShown.some((d) => d.id === 'training')) sessions += trained.count;
@@ -69,22 +71,22 @@ export function openCalendar({ selected, today, widgets, customs = [], isFlame, 
       const dots = dotsShown.filter((d) => (d.id === 'training' ? trained : d.custom ? day?.custom?.[d.id] != null : entries[d.id]));
       const n = parseKey(k).getDate();
       cells.push(h('button', {
-        class: `cal-day ${lit ? 'lit' : ''} ${k === today ? 'today' : ''} ${k === selected ? 'sel' : ''} ${future ? 'future' : ''}`,
+        class: `cal-day ${lit ? 'lit' : ''} ${saved ? 'saved' : ''} ${k === today ? 'today' : ''} ${k === selected ? 'sel' : ''} ${future ? 'future' : ''}`,
         disabled: future,
-        'aria-label': `${n}${lit ? ', jour parfait' : ''}${dots.length ? `, ${dots.map((d) => d.label).join(', ')}` : ''}`,
+        'aria-label': `${n}${lit ? ', arrosé' : saved ? ', rattrapé par un engrais' : ''}${dots.length ? `, ${dots.map((d) => d.label).join(', ')}` : ''}`,
         onClick: () => {
           close();
           if (k !== selected) onPick(k);
         },
       },
-        lit ? h('span', { class: 'cal-flame', 'aria-hidden': 'true' }, icon('flame', 11)) : null,
+        lit || saved ? h('span', { class: 'cal-flame', 'aria-hidden': 'true' }, icon(lit ? 'drop' : 'fertilizer', 11)) : null,
         h('span', { class: 'cal-num' }, n),
         h('span', { class: 'cal-dots', 'aria-hidden': 'true' },
           dots.map((d) => h('i', { style: { '--c': d.id === 'training' ? trained.color || d.c : d.c } })))));
     }
     grid.replaceChildren(...cells);
     stats.replaceChildren(
-      h('span', { class: 'cal-stat flame' }, icon('flame', 14), `${flames} jour${flames > 1 ? 's' : ''} parfait${flames > 1 ? 's' : ''}`),
+      h('span', { class: 'cal-stat flame' }, icon('drop', 14), `${flames} jour${flames > 1 ? 's' : ''} arrosé${flames > 1 ? 's' : ''}`),
       dotsShown.some((d) => d.id === 'training') ? h('span', { class: 'cal-stat' }, icon('dumbbell', 14), `${sessions} séance${sessions > 1 ? 's' : ''}`) : '');
   }
 

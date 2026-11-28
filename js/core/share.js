@@ -1,10 +1,11 @@
-// Cartes à partager dans la discussion : flamme, objectif, record, séance, valeur du jour.
+// Cartes à partager dans la discussion : plante, objectif, record, séance, valeur du jour, graphique.
 // Chaque carte = { payload, body } : payload s'affiche en bulle colorée, body est le texte de repli
 // (aperçu de la liste d'amis, notification, ami qui n'a pas encore mis l'app à jour). Pur : testable sous Node.
 
 import { fmtNum, fmtKg, fmtSleep, fmtDuration, fmtVolume } from './format.js';
 import { addDays, keysBetween, formatWeekday, dayMonth } from './date.js';
 import { METRICS } from './metrics.js';
+import { stageOf, STAGES, daysLabel } from './growth.js';
 import { sessionRecords, sessionStats, setsSummary } from './training.js';
 import { MOODS } from './metrics.js';
 import { WIDGETS, customSummary } from './prefs.js';
@@ -104,11 +105,14 @@ function card(type, emoji, title, value, sub = '', color = '', lines = [], extra
   return { payload, body: `${emoji} ${title} : ${value}${sub ? ` (${sub})` : ''}` };
 }
 
-export function flameCard(streak) {
-  const n = Math.max(0, Math.round(streak || 0));
-  return n
-    ? card('flame', '🔥', 'Ma flamme', `${n} jour${n > 1 ? 's' : ''} d’affilée`, n >= 7 ? 'je ne lâche rien' : 'et ça continue', '#ff7a2f')
-    : card('flame', '🔥', 'Ma flamme', 'à rallumer aujourd’hui', 'motive-moi !', '#ff7a2f');
+/** Ma plante (type « flame » gardé pour les anciennes versions de l'app). `g` : growth() ou nombre de jours d'affilée. */
+export function plantCard(g) {
+  const n = Math.max(0, Math.round(typeof g === 'number' ? g : g?.streak || 0));
+  const st = stageOf(n);
+  const next = STAGES[STAGES.indexOf(st) + 1];
+  if (!n) return card('flame', st.emoji, 'Ma graine', 'à arroser aujourd’hui', 'motive-moi !', '#ff8a52');
+  return card('flame', st.emoji, st.ta.replace(/^ta /, 'Ma ').replace(/^ton /, 'Mon '), `${daysLabel(n)} d’affilée`,
+    next ? `${next.name.toLowerCase()} dans ${daysLabel(next.min - n)}` : 'la vie est revenue 🌍', '#ff8a52');
 }
 
 /** Objectif évalué (voir goals.evaluateGoal). */

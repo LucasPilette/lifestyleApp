@@ -6,7 +6,7 @@ import { SEED_EXERCISES, SEED_VERSION, TEMPLATE_COLORS, TEMPLATE_RENAMES, seedTe
 import { clone, mergeDeep, uid } from './util.js';
 import { normalizeWarmups, createSession } from './training.js';
 import { dateKey, parseKey, todayKey } from './date.js';
-import { DEFAULT_OBJECTIVES, DEFAULT_GOAL_LIST, bestBenchLift } from './goals.js';
+import { DEFAULT_OBJECTIVES, DEFAULT_GOAL_LIST, LEGACY_GOAL_LIST, LEGACY_OBJECTIVES, bestBenchLift, goalsFromWidgets, followWidgetTargets } from './goals.js';
 import { DEFAULT_WIDGETS, DEFAULT_FLAME } from './prefs.js';
 
 export const DAY_FIELDS = ['sleepMin', 'sleepQ', 'kcal', 'prot', 'steps', 'weight', 'mood', 'moodNote', 'habits', 'habitsTotal', 'custom'];
@@ -17,7 +17,7 @@ export const DEFAULT_SETTINGS = {
   mode: 'dark', // dark | light | auto
   focus: [], // objectifs de vie cochés à l'accueil (sport, diet…)
   widgets: DEFAULT_WIDGETS, // rubriques de l'accueil, dans l'ordre
-  flame: DEFAULT_FLAME, // rubriques exigées pour la flamme ('training' = minimum de séances par semaine)
+  flame: DEFAULT_FLAME, // ce qui arrose la graine (ancien nom : flamme ; 'training' = minimum de séances par semaine)
   habits: [], // routines : [{ id, name }]
   customWidgets: [], // widgets créés par l'utilisateur (voir core/prefs.js)
   notifications: { enabled: false, reminderHour: 21 }, // accepte d'en recevoir ; rappel du soir (null = aucun)
@@ -29,7 +29,7 @@ export const DEFAULT_SETTINGS = {
   avatarUrl: null, // adresse publique de la photo sur le serveur
   objectives: DEFAULT_OBJECTIVES, // objectifs à long terme (voir core/goals.js)
   goalList: DEFAULT_GOAL_LIST, // objectifs affichés, dans l'ordre
-  goals: { sleepMin: 480, kcal: 2600, prot: 150, steps: 10000, minSessions: 3 }, // minSessions : minimum hebdo pour garder la flamme
+  goals: { sleepMin: 480, kcal: 2600, prot: 150, steps: 10000, minSessions: 3 }, // minSessions : minimum hebdo pour arroser la graine
   bodyweight: null, // kg, utilisé pour les exercices au poids du corps / lestés
   sound: true,
   countdown: true, // bips à 3-2-1 secondes
@@ -75,6 +75,11 @@ export async function initStore() {
   ]);
   // Avant l'onboarding, le prénom par défaut était « Lucas » : on le garde pour les installations existantes.
   if (settings && settings.name === undefined) settings.name = 'Lucas';
+  // Installation d'origine jamais réglée : elle garde ses objectifs d'alors (les défauts sont désormais vides).
+  if (settings && (days.length || sessions.length)) {
+    if (settings.goalList === undefined) settings.goalList = LEGACY_GOAL_LIST;
+    if (settings.objectives === undefined) settings.objectives = clone(LEGACY_OBJECTIVES);
+  }
   state.settings = mergeDeep(DEFAULT_SETTINGS, settings || {});
   state.meta = meta || {};
   // Installation existante sans onboarding : on le proposera une fois, prérempli (rien n'est effacé).
@@ -86,6 +91,7 @@ export async function initStore() {
   sortSessions();
 
   await applySeed();
+  await goalsFromWidgetsOnce();
   await backfillWeek48();
   await fixBenchRealOnce();
   requestPersistentStorage();
@@ -126,6 +132,25 @@ async function applySeed() {
   await db.kvSet('meta', state.meta);
 }
 
+/**
+ * Comptes créés avant que les objectifs viennent des widgets : l'onboarding proposait une liste fixe sans cible
+ * (bench, sommeil…). Si aucun objectif n'a été réglé, la liste devient celle des objectifs de ses widgets.
+ */
+async function goalsFromWidgetsOnce() {
+  if (state.meta.goalsFromWidgets) return;
+  const st = state.settings;
+  const list = st.goalList || [];
+  if (state.meta.onboarded && !list.some((k) => st.objectives?.[k]?.target != null)) {
+    const g = goalsFromWidgets(st);
+    // Objectifs non réglés retirés (dont l'ancien 1RM au bench), ceux des widgets ajoutés.
+    const objectives = Object.fromEntries(Object.entries(st.objectives || {}).filter(([, o]) => o?.target != null));
+    state.settings = { ...st, goalList: g.goalList, objectives: { ...objectives, ...g.objectives } };
+    await db.kvSet('settings', state.settings);
+  }
+  state.meta = { ...state.meta, goalsFromWidgets: true };
+  await db.kvSet('meta', state.meta);
+}
+
 async function requestPersistentStorage() {
   try {
     if (navigator.storage?.persist && !(await navigator.storage.persisted())) {
@@ -146,7 +171,13 @@ export async function isStoragePersisted() {
 
 // --- Réglages ------------------------------------------------------------
 export function updateSettings(patch) {
+  const prev = state.settings;
   state.settings = mergeDeep(state.settings, patch);
+  // Objectifs des widgets modifiés (sommeil visé, pas, widget chiffré…) : les objectifs à long terme suivent.
+  if (patch.goals || patch.customWidgets || patch.widgets) {
+    const follow = followWidgetTargets(prev, state.settings);
+    if (follow) state.settings = mergeDeep(state.settings, follow);
+  }
   persist(db.kvSet('settings', state.settings));
   emit('settings');
 }
@@ -332,7 +363,10 @@ export function deleteSession(id) {
 }
 
 // --- Sauvegarde / restauration -------------------------------------------
-export function exportData() {
+export async function exportData() {
+  // Compte ami (anonyme) : de quoi le retrouver après une réinstallation (amis, discussions, code ami).
+  // Le fichier donne accès à ce compte : il reste personnel.
+  const auth = await db.kvGet('auth');
   return {
     app: 'lifestyleApp',
     format: 1,
@@ -343,19 +377,30 @@ export function exportData() {
     exercises: [...state.exercises.values()],
     templates: state.templates,
     sessions: state.sessions,
+    account: auth?.refresh_token ? { refresh_token: auth.refresh_token, user: { id: auth.user?.id || null } } : null,
   };
 }
 
 export async function importData(data) {
   if (!data || data.app !== 'lifestyleApp' || !Array.isArray(data.sessions)) {
-    throw new Error("Ce fichier n'est pas une sauvegarde Eclipse valide.");
+    throw new Error("Ce fichier n'est pas une sauvegarde Grow (ou Eclipse) valide.");
   }
   const arrays = ['days', 'exercises', 'templates', 'sessions'];
   for (const k of arrays) {
     if (!Array.isArray(data[k])) throw new Error(`Sauvegarde incomplète (${k}).`);
   }
+  // Compte ami : celui de la sauvegarde s'il y est (réinstallation), sinon celui de ce téléphone.
+  const current = await db.kvGet('auth');
+  const saved = typeof data.account?.refresh_token === 'string'
+    ? { access_token: null, refresh_token: data.account.refresh_token, expires_at: 0, user: { id: data.account.user?.id || null } }
+    : null;
+  const auth = saved || current || null;
   await db.replaceAll({
-    kv: { settings: data.settings || {}, meta: { ...(data.meta || {}), seedVersion: data.meta?.seedVersion || SEED_VERSION, onboarded: data.meta?.onboarded || state.meta.onboarded || null } },
+    kv: {
+      settings: data.settings || {},
+      meta: { ...(data.meta || {}), seedVersion: data.meta?.seedVersion || SEED_VERSION, onboarded: data.meta?.onboarded || state.meta.onboarded || null },
+      ...(auth ? { auth } : {}),
+    },
     days: data.days.filter((d) => d && d.date),
     exercises: data.exercises.filter((e) => e && e.id),
     templates: data.templates.filter((t) => t && t.id),

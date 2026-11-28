@@ -79,7 +79,7 @@ export default function widgetEditView(root, id) {
     preview.replaceChildren(h('div', { class: 'rb-head' },
       h('div', { class: 'card-icon' }, w.emoji ? h('span', { class: 'rb-emoji' }, w.emoji) : icon(CUSTOM_KINDS[w.kind]?.icon || 'flag')),
       h('h2', null, w.name || CUSTOM_KINDS[w.kind]?.example || 'Mon widget'),
-      h('span', { class: 'rb-sum' }, inFlame ? '🔥' : ''),
+      h('span', { class: 'rb-sum' }, inFlame ? '💧' : ''),
       h('span', { class: 'rb-status', 'aria-hidden': 'true' })));
   };
 
@@ -148,7 +148,7 @@ export default function widgetEditView(root, id) {
           h('div', { class: 'we-icon-sugg' }, ICON_SUGGESTIONS.map((e) => h('button', { class: 'we-icon-btn', 'aria-label': e, onClick: () => { w.emoji = e; emoji.value = e; renderPreview(); } }, e)))),
         h('div', { class: 'field-label' }, 'Couleur'), swatches,
         kindFields(),
-        h('div', { class: 'ed-line' }, h('span', null, 'Pour la flamme, à faire chaque jour'),
+        h('div', { class: 'ed-line' }, h('span', null, 'Arrose ta graine (à faire chaque jour)'),
           flameToggle(inFlame, (on) => { inFlame = on; renderPreview(); }))),
       h('button', { class: 'btn primary block', onClick: save }, icon('check', 18), existing ? 'Enregistrer' : 'Ajouter à l’accueil'),
       existing ? h('button', { class: 'btn danger block', onClick: remove }, icon('trash', 18), 'Supprimer ce widget') : '');

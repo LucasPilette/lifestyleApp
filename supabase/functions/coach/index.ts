@@ -99,7 +99,7 @@ const SCHEMA = {
   },
 };
 
-const SYSTEM = `Tu es un coach de musculation expérimenté qui conçoit des programmes pour Eclipse, une app de suivi d'entraînement.
+const SYSTEM = `Tu es un coach de musculation expérimenté qui conçoit des programmes pour Grow, une app de suivi d'entraînement.
 L'app propose automatiquement les charges d'une séance à l'autre et applique une double progression (fourchette de répétitions), avec un minuteur de repos.
 
 Conçois un programme hebdomadaire adapté à la personne :

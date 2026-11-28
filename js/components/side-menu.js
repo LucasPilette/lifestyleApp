@@ -7,10 +7,11 @@ import { drawer } from '../core/ui.js';
 import { formatFriendCode } from '../core/prefs.js';
 import { inboxCount } from '../core/social.js';
 import { avatarEl } from './avatar.js';
+import { logoMark } from './plant.js';
 import { VERSION } from '../version.js';
 
 const ITEMS = [
-  { path: '/profile', icon: 'user', label: 'Profil', sub: 'Code ami, thème, accueil, flamme', c: 'var(--accent)' },
+  { path: '/profile', icon: 'user', label: 'Profil', sub: 'Code ami, thème, accueil, arrosage', c: 'var(--accent)' },
   { path: '/friends', icon: 'users', label: 'Amis', sub: 'Ajouter, discuter', c: 'var(--c-mood)', badge: true },
   { path: '/history', icon: 'history', label: 'Historique', sub: 'Séances passées et progression', c: 'var(--c-prot)' },
   { path: '/goals', icon: 'trophy', label: 'Objectifs', sub: 'Poids, sommeil, charges…', c: 'var(--c-weight)' },
@@ -32,7 +33,7 @@ export function openSideMenu() {
         avatarEl({ name, url: state.settings.avatar, size: 'big' }),
         h('span', { class: 'drawer-id' },
           h('span', { class: 'drawer-app' }, name),
-          h('span', { class: 'drawer-user' }, state.settings.friendCode ? `Code ami · ${formatFriendCode(state.settings.friendCode)}` : 'Eclipse'))),
+          h('span', { class: 'drawer-user' }, state.settings.friendCode ? `Code ami · ${formatFriendCode(state.settings.friendCode)}` : 'Grow'))),
       h('button', { class: 'icon-btn', 'aria-label': 'Fermer le menu', onClick: () => close() }, icon('x'))),
     h('div', { class: 'drawer-list' },
       ITEMS.map((it) =>
@@ -41,6 +42,6 @@ export function openSideMenu() {
           h('span', { class: 'drawer-txt' }, h('b', null, it.label), h('span', null, it.sub)),
           it.badge ? badge : null,
           icon('chevron', 18, 'chev')))),
-    h('div', { class: 'drawer-foot' }, h('div', { class: 'drawer-logo', 'aria-hidden': 'true' }), `Eclipse · ${VERSION}`),
+    h('div', { class: 'drawer-foot' }, logoMark(18), `Grow · ${VERSION}`),
   ], { label: 'Menu principal' });
 }

@@ -4,7 +4,11 @@
 import { h, icon, iconButton, numInput } from '../core/dom.js';
 import { state, getDay, setDayField, setDayFields, setDayCustom, activeSession, doneSessions, sessionColor, updateSettings, updateMeta } from '../core/store.js';
 import { todayKey, addDays, formatLong, formatShort, weekStart, dateKey, agoLabel, formatWeekday } from '../core/date.js';
-import { METRICS, MOODS, meetsGoal, dayChecklist, perfectStreak, flameChecker, weekTraining, weightRequired, lastValueBefore } from '../core/metrics.js';
+import { METRICS, MOODS, meetsGoal, dayChecklist, weekTraining, weightRequired, lastValueBefore } from '../core/metrics.js';
+import { growth, STAGES } from '../core/growth.js';
+import { openPlantSheet, celebrateStage, introduceGrow } from '../components/plant.js';
+import { plantCard } from '../core/share.js';
+import { openSendToSheet } from '../components/share-sheet.js';
 import { navigate } from '../core/router.js';
 import { fmtNum, fmtClock, fmtSleep, parseNum } from '../core/format.js';
 import { debounce } from '../core/util.js';
@@ -15,7 +19,7 @@ import { inboxCount } from '../core/social.js';
 import { habitsEditor } from '../components/prefs-ui.js';
 import { haptic } from '../core/feedback.js';
 import { dayRings } from '../components/ring.js';
-import { greetingMessage } from '../core/greeting.js';
+import { greetingMessage, todoText } from '../core/greeting.js';
 import { openCalendar } from '../components/calendar.js';
 import { openSideMenu } from '../components/side-menu.js';
 
@@ -80,7 +84,8 @@ export default function home(root, dateParam) {
       cur.color ||= sessionColor(s);
       sessionDays.set(k, cur);
     }
-    openCalendar({ selected: date, today, widgets, customs, isFlame: flameChecker(state.days, today, streakOpts()), sessionDays, onPick: goDay });
+    const g = growth(state.days, today, streakOpts());
+    openCalendar({ selected: date, today, widgets, customs, isWatered: (k) => g.watered.has(k), isSaved: (k) => g.saved.has(k), sessionDays, onPick: goDay });
   };
   const header = h('header', { class: 'topbar home-top' },
     h('div', { class: 'top-left' }, iconButton('menu', 'Menu', openSideMenu, 'glass-btn')),
@@ -91,7 +96,7 @@ export default function home(root, dateParam) {
       h('button', { class: 'icon-btn', 'aria-label': 'Jour suivant', disabled: isToday, onClick: () => goDay(addDays(date, 1)) }, icon('chevron', 18))),
     h('div', { class: 'top-right' }));
 
-  // --- Salutation, message et anneau du jour (flamme au centre) ---
+  // --- Salutation, message et anneau du jour (la plante au centre) ---
   const message = h('p', { class: 'greet-msg' });
   const minSessions = goals.minSessions || 3;
   const streakOpts = () => ({
@@ -102,35 +107,65 @@ export default function home(root, dateParam) {
     weekly: rules.weekly,
     custom: rules.custom,
   });
-  const flameRuleText = () => {
+  /** Ce qui arrose la graine, en clair (fiche de la plante). */
+  const waterRuleText = () => {
     const daily = rules.items.map((id) => defs[id]?.short || id);
     const parts = [];
-    if (daily.length) parts.push(`Jour parfait : ${daily.join(', ')} renseignés.`);
-    if (rules.weekly) parts.push(`Moins de ${minSessions} séances dans la semaine éteint la flamme.`);
-    return parts.join(' ') || 'Aucun critère de flamme : choisis-les dans ton profil.';
+    if (daily.length) parts.push(`Ce qui l’arrose chaque jour : ${daily.join(', ')}.`);
+    if (rules.weekly) parts.push(`Et au moins ${minSessions} séances par semaine.`);
+    return parts.join(' ') || 'Rien ne l’arrose pour l’instant : choisis ce qui compte dans ton profil.';
   };
   const ringBox = h('button', { class: 'ring-box', onClick: () => {
-    const n = perfectStreak(state.days, today, streakOpts());
-    const streakTxt = n ? `🔥 ${n} jour${n > 1 ? 's' : ''} parfait${n > 1 ? 's' : ''} d’affilée. ` : '';
-    toast(`${streakTxt}${flameRuleText()}`, { duration: 5000 });
+    const c = dayChecklist(state.days, today, rules.items, rules.custom);
+    openPlantSheet(growth(state.days, today, streakOpts()), { rules: waterRuleText(), todo: todoText(c) });
   } });
+  let wasWatered = null;
+  /** Nouvelles de la plante (une fois chacune) : nouveau stade, engrais gagné ou utilisé, plante fanée. */
+  const plantNews = (g) => {
+    const lastSaved = [...g.saved, ...g.savedWeeks].sort().pop() || null;
+    const now = { stage: g.index, fert: g.fertilizer, saved: lastSaved, wilted: g.wilted };
+    const seen = state.meta.plant;
+    if (seen && JSON.stringify(seen) === JSON.stringify(now)) return;
+    updateMeta({ plant: now });
+    if (!seen || !state.meta.help?.grow) return; // première fois : la présentation de Grow s'en charge
+    if (g.index > seen.stage) {
+      celebrateStage(g, { onShare: () => openSendToSheet(plantCard(g), { title: 'Partager ma plante' }) });
+    } else if (lastSaved && lastSaved !== seen.saved) {
+      toast(`🌾 Un engrais a rattrapé ton oubli : ${g.stage.ta} continue de pousser.`, { duration: 5000 });
+    } else if (g.fertilizer > seen.fert) {
+      toast('🌾 +1 engrais ! Si tu oublies un jour, il le rattrapera.', { duration: 4500 });
+    } else if (g.wilted && g.wilted !== seen.wilted && g.streak < STAGES[1].min) {
+      toast('Ta plante a fané… Une nouvelle graine est plantée : à toi de l’arroser 🌰', { duration: 5000 });
+    }
+  };
   const hour = new Date().getHours();
   const hello = `${hour >= 18 || hour < 4 ? 'Bonsoir' : 'Bonjour'}${state.settings.name ? ` ${state.settings.name}` : ''}`;
   const greet = h('section', { class: 'greet' }, h('div', { class: 'greet-text' }, h('h1', null, hello), message), ringBox);
   refreshers.push(() => {
     const c = dayChecklist(state.days, date, rules.items, rules.custom);
-    const n = perfectStreak(state.days, today, streakOpts());
+    const g = growth(state.days, today, streakOpts());
+    const n = g.streak;
     // semaine du jour affiché (pour un jour passé : sa semaine, comptée jusqu'à dimanche)
     const wk = weekTraining(sessionDateList(), date, minSessions);
     ringBox.replaceChildren(
       dayRings({ data: c.items.length ? c.done / c.items.length : 0, activity: hasTraining ? Math.min(1, wk.count / minSessions) : null }),
-      h('span', { class: `ring-center ${n > 0 ? 'lit' : ''}` }, icon('flame', 15), h('b', null, n)));
+      h('span', { class: `ring-center ${n > 0 ? 'lit' : ''} ${g.todayDone ? 'watered' : ''}` }, icon(`st-${g.stage.id}`, 17), h('b', null, n)));
     ringBox.classList.toggle('perfect', c.perfect);
-    ringBox.setAttribute('aria-label', `Saisies ${c.done} sur ${c.items.length}${hasTraining ? `, ${wk.count} séances sur ${minSessions} cette semaine` : ''}, ${n} jours parfaits d’affilée`);
-    // Semaine de démarrage : elle n'éteint jamais la flamme, inutile d'alerter.
+    ringBox.setAttribute('aria-label', `${g.stage.name}, ${n} jour${n > 1 ? 's' : ''} arrosé${n > 1 ? 's' : ''} d’affilée${g.fertilizer ? `, ${g.fertilizer} engrais` : ''}. Saisies ${c.done} sur ${c.items.length}${hasTraining ? `, ${wk.count} séances sur ${minSessions} cette semaine` : ''}. Ouvrir ta plante`);
+    // Arrosée à l'instant : petite éclaboussure
+    if (wasWatered === false && g.todayDone) {
+      ringBox.classList.remove('splash');
+      void ringBox.offsetWidth;
+      ringBox.classList.add('splash');
+      haptic();
+    }
+    wasWatered = g.todayDone;
+    // Semaine de démarrage : elle ne fait jamais faner la plante, inutile d'alerter.
     const grace = streakOpts().graceUntil;
     const graceWeek = grace && weekStart(date) <= weekStart(grace);
-    message.textContent = greetingMessage(c, isToday, rules.weekly && !graceWeek ? wk : null, { hour: new Date().getHours(), streak: n });
+    message.textContent = greetingMessage(c, isToday, rules.weekly && !graceWeek ? wk : null,
+      { hour: new Date().getHours(), streak: n, stage: g.stage, next: g.next, toNext: g.toNext });
+    if (isToday && state.meta.onboarded) plantNews(g);
   });
 
   const page = h('main', { class: 'page home-page' }, greet);
@@ -516,10 +551,16 @@ export default function home(root, dateParam) {
   root.append(h('div', { class: 'home-bg', 'aria-hidden': 'true' }), h('div', { class: 'view has-cta' }, header, page), dock);
 
   // Tutoriel à la première ouverture (après l'onboarding)
+  if (isToday && state.meta.onboarded && state.meta.tourDone && !state.meta.help?.grow) {
+    // Déjà venu avant Grow : présentation de la graine, des étapes et de l'engrais.
+    setTimeout(() => {
+      if (document.body.contains(dock)) introduceGrow(growth(state.days, today, streakOpts()), { onDone: () => updateMeta({ help: { ...(state.meta.help || {}), grow: true } }) });
+    }, 600);
+  }
   if (isToday && state.meta.onboarded && !state.meta.tourDone) {
     setTimeout(() => {
       if (!document.body.contains(dock)) return;
-      startTour(homeTour(), { onDone: () => updateMeta({ tourDone: true }) });
+      startTour(homeTour(), { onDone: () => updateMeta({ tourDone: true, help: { ...(state.meta.help || {}), grow: true } }) });
     }, 700);
   }
 
@@ -535,12 +576,13 @@ export default function home(root, dateParam) {
 /** Étapes du tutoriel de l'accueil. */
 function homeTour() {
   return [
-    { sel: '.ring-box', title: 'Ta flamme 🔥', text: 'Chaque jour où tu remplis ce qui compte pour ta flamme, elle grandit d’un jour. L’anneau montre où tu en es ; touche-le pour revoir les règles.' },
+    { sel: '.ring-box', title: 'Ta graine 🌰', text: 'Chaque journée réussie l’arrose 💧 et la fait grandir : pousse à 7 jours, arbuste à 1 mois, arbre à 3 mois, chêne à 6 mois, arbre-monde à 1 an. L’anneau montre ta journée ; touche-le pour voir ta plante.' },
+    { sel: '.ring-box', title: 'L’engrais 🌾', text: 'Chaque semaine parfaite (7 jours arrosés) te donne un engrais, 3 au plus. Un jour oublié ? Un engrais le rattrape tout seul et ta plante ne fane pas. Sans engrais, elle fane et tout recommence depuis une graine.' },
     { sel: '.home-page .rubric', title: 'Tes widgets', text: 'Touche un widget pour saisir ta journée. La pastille cochée indique que c’est fait ; l’icône de courbe ouvre ton suivi.' },
-    { sel: '.add-widget', title: 'Crée tes widgets', text: 'Liste à cocher, oui / non, émoji, chiffre ou texte : ajoute ce que tu veux suivre, et choisis s’il compte pour ta flamme.' },
-    { sel: '.day-label', title: 'Le calendrier', text: 'Touche la date pour voir le mois : tes flammes et les jours renseignés. Les flèches passent d’un jour à l’autre.' },
-    { sel: '.top-left .icon-btn', title: 'Le menu', text: 'Ton profil (code ami, thème, widgets, flamme, rappels), tes amis, l’historique et les paramètres.' },
-    { sel: '.dock-btn.chat', title: 'Tes amis', text: 'Ajoute tes amis avec leur code à 6 chiffres, discutez et suivez vos flammes.' },
+    { sel: '.add-widget', title: 'Crée tes widgets', text: 'Liste à cocher, oui / non, émoji, chiffre ou texte : ajoute ce que tu veux suivre, et choisis s’il arrose ta graine.' },
+    { sel: '.day-label', title: 'Le calendrier', text: 'Touche la date pour voir le mois : les jours arrosés 💧 et ce que tu as noté. Les flèches passent d’un jour à l’autre.' },
+    { sel: '.top-left .icon-btn', title: 'Le menu', text: 'Ton profil (code ami, thème, widgets, ce qui arrose ta graine, rappels), tes amis, l’historique et les paramètres.' },
+    { sel: '.dock-btn.chat', title: 'Tes amis', text: 'Ajoute tes amis avec leur code à 6 chiffres, discutez et regardez vos plantes pousser.' },
     { sel: '.dock-main', title: 'S’entraîner', text: 'Lance une séance : charges proposées, minuteur de repos, records. Pas encore de programme ? Le coach IA t’en crée un en une minute.' },
     { sel: '.dock-btn.goals', title: 'Tes objectifs', text: 'Fixe-toi des objectifs sur tes widgets (moyenne, dernière valeur, régularité) et suis ta progression.' },
   ];

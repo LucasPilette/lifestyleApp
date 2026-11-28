@@ -1,5 +1,9 @@
 # Notes pour Claude
 
+- L'app s'appelle **Grow** (anciennement Eclipse). La « flamme » est devenue une graine qui pousse (`js/core/growth.js`,
+  illustrations dans `js/components/plant.js`) ; dans le code et les données, les noms `flame` (critères, colonne
+  `profiles.flame`) sont conservés pour la compatibilité, seuls les textes ont changé.
+
 - App web statique sans build ni dépendance (le dossier est synchronisé par OneDrive : ne pas ajouter de `node_modules`).
   Modules ES natifs, rendu DOM via `h()` dans `js/core/dom.js`. Interface et commentaires en français.
 - Cible principale : iPhone, PWA installée (Safari standalone). Penser safe areas, champs ≥ 16px (sinon zoom iOS),

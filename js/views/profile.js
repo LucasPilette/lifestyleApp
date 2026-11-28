@@ -1,4 +1,4 @@
-// Profil : prénom, code ami, thème, widgets de l'accueil, flamme, routines, partage et notifications.
+// Profil : prénom, code ami, thème, widgets de l'accueil, ce qui arrose la graine, routines, partage et notifications.
 
 import { h, icon } from '../core/dom.js';
 import { state, updateSettings, setDayFields, updateMeta } from '../core/store.js';
@@ -19,7 +19,7 @@ export function friendCodeCard() {
   async function share() {
     const c = state.settings.friendCode;
     if (!c) return;
-    const text = `Ajoute-moi sur Eclipse avec mon code ami : ${formatFriendCode(c)}`;
+    const text = `Viens faire pousser ta graine avec moi sur Grow 🌱 Mon code ami : ${formatFriendCode(c)}`;
     try {
       if (navigator.share) await navigator.share({ text });
       else {
@@ -80,7 +80,7 @@ export default function profileView(root) {
     syncName();
   });
 
-  // Flamme : un interrupteur par widget affiché
+  // Arrosage : un interrupteur par widget affiché
   const flameBox = h('div', { class: 'list flame-list' });
   const renderFlame = () => {
     const customs = state.settings.customWidgets || [];
@@ -121,7 +121,7 @@ export default function profileView(root) {
         onEdit: (id) => navigate(`/widgets/${id}`),
       }),
       h('button', { class: 'btn dashed block', onClick: () => navigate('/widgets/new') }, icon('plus', 18), 'Créer un widget')),
-    ...section('Flamme 🔥', h('p', { class: 'pf-hint' }, 'Allume 🔥 ce que tu dois faire chaque jour pour garder ta flamme.'), flameBox),
+    ...section('Ce qui arrose ta graine 💧', h('p', { class: 'pf-hint' }, 'Active 💧 ce que tu dois faire chaque jour : une journée où tout est fait arrose ta graine et la fait pousser.'), flameBox),
     ...section('Mes routines', h('div', { class: 'card' }, habitsEditor({ value: st.habits || [], onChange: onHabits }))),
     ...section('Amis et notifications',
       h('div', { class: 'list' },
@@ -131,7 +131,7 @@ export default function profileView(root) {
         notificationToggle(!!st.notifications?.enabled, (v) => updateSettings({ notifications: { enabled: v } })),
         h('div', { class: 'row pf-reminder' }, icon('timer', 20),
           h('div', { class: 'row-main' }, h('div', { class: 'row-title' }, 'Rappel du soir'),
-            h('div', { class: 'row-sub' }, 'Si ta journée n’est pas complète (« ta flamme va s’éteindre »). Avec les notifications activées.'),
+            h('div', { class: 'row-sub' }, 'Si ta graine n’est pas encore arrosée le soir (« ta pousse a soif »). Avec les notifications activées.'),
             segmented([['off', 'Aucun'], ['19', '19 h'], ['20', '20 h'], ['21', '21 h'], ['22', '22 h']],
               st.notifications?.reminderHour == null ? 'off' : String(st.notifications.reminderHour),
               (v) => { updateSettings({ notifications: { reminderHour: v === 'off' ? null : Number(v) } }); schedulePushStatus(); }))))),

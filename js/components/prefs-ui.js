@@ -1,5 +1,5 @@
 // Composants de personnalisation, partagés par l'onboarding et le profil :
-// thème, objectifs de vie, widgets de l'accueil, flamme, habitudes, notifications.
+// thème, objectifs de vie, widgets de l'accueil, ce qui arrose la graine, habitudes, notifications.
 
 import { h, icon } from '../core/dom.js';
 import { segmented, toggle, toast } from '../core/ui.js';
@@ -98,13 +98,13 @@ export function widgetPicker({ value, suggested = [], reorder = false, onChange,
   return wrap;
 }
 
-/** Interrupteur « compte pour la flamme » d'un widget (compact : icône seule). */
+/** Interrupteur « arrose ta graine » d'un widget (compact : icône seule). */
 export function flameToggle(on, onChange, { compact = false } = {}) {
-  const btn = h('button', { class: 'flame-toggle', role: 'switch', 'aria-checked': String(on), 'aria-label': 'Compte pour la flamme' });
+  const btn = h('button', { class: 'flame-toggle', role: 'switch', 'aria-checked': String(on), 'aria-label': 'Arrose ta graine' });
   const render = () => {
     btn.className = `flame-toggle ${on ? 'on' : ''} ${compact ? 'compact' : ''}`;
     btn.setAttribute('aria-checked', String(on));
-    btn.replaceChildren(icon('flame', compact ? 17 : 15), compact ? '' : on ? 'Compte pour la flamme' : 'Hors flamme');
+    btn.replaceChildren(icon('drop', compact ? 17 : 15), compact ? '' : on ? 'Arrose ta graine' : 'N’arrose pas');
   };
   btn.addEventListener('click', () => { on = !on; haptic(); render(); onChange(on); });
   render();
@@ -161,7 +161,7 @@ export function notificationToggle(enabled, onChange) {
   const sub = h('div', { class: 'row-sub' });
   const setSub = () => {
     if (!supported) sub.textContent = 'Disponible une fois l’app installée sur l’écran d’accueil (iOS 16.4+).';
-    else if (Notification.permission === 'denied') sub.textContent = 'Refusées dans les réglages de l’iPhone (Réglages > Notifications > Eclipse).';
+    else if (Notification.permission === 'denied') sub.textContent = 'Refusées dans les réglages de l’iPhone (Réglages > Notifications > Grow).';
     else sub.textContent = 'Messages, demandes d’amis, coups de mou et journées parfaites de tes amis.';
   };
   setSub();

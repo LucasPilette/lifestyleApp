@@ -79,7 +79,7 @@ export default function historyView(root) {
       h('button', { class: `past-choice ${tplId === null ? 'sel' : ''}`, onClick: () => { tplId = null; renderChoices(); } }, 'Séance libre'));
     renderChoices();
     sheet((close) => [
-      h('p', { class: 'sheet-text' }, 'Pour une séance faite sans l’app. Elle compte pour ta flamme ; tu pourras ensuite saisir tes séries (ou les laisser vides).'),
+      h('p', { class: 'sheet-text' }, 'Pour une séance faite sans l’app. Elle compte pour ta plante ; tu pourras ensuite saisir tes séries (ou les laisser vides).'),
       h('div', { class: 'field-label' }, 'Séance'), choices,
       h('div', { class: 'field-label' }, 'Jour'), date,
       h('div', { class: 'sheet-actions' },

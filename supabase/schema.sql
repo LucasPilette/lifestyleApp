@@ -1,4 +1,4 @@
--- Eclipse : profils, amis et messages.
+-- Grow (anciennement Eclipse) : profils, amis et messages.
 -- À coller dans Supabase > SQL Editor > New query, puis « Run ». Ré-exécutable sans risque.
 -- Prérequis : Authentication > Sign In / Providers > « Allow anonymous sign-ins » activé.
 --
@@ -353,7 +353,28 @@ language sql security definer set search_path = public as $$
   select json_build_object('ok', true);
 $$;
 
+-- Grow : la plante selon les jours arrosés d'affilée (mêmes étapes que js/core/growth.js).
+-- grow_stage(12, 'ta') = 'ta pousse' ; grow_stage(40, 'sa') = 'son arbuste'.
+create or replace function public.grow_stage(n int, poss text default 'ta') returns text
+language sql immutable set search_path = public as $$
+  select case
+    when coalesce(n, 0) >= 365 then case when poss = 'sa' then 'son' else 'ton' end || ' arbre-monde'
+    when n >= 180 then case when poss = 'sa' then 'son' else 'ton' end || ' chêne'
+    when n >= 90 then case when poss = 'sa' then 'son' else 'ton' end || ' arbre'
+    when n >= 30 then case when poss = 'sa' then 'son' else 'ton' end || ' arbuste'
+    when n >= 7 then case when poss = 'sa' then 'sa' else 'ta' end || ' pousse'
+    else case when poss = 'sa' then 'sa' else 'ta' end || ' graine'
+  end;
+$$;
+-- Nouvelle étape atteinte pile ce jour-là (sinon null).
+create or replace function public.grow_new_stage(n int) returns text
+language sql immutable set search_path = public as $$
+  select case n when 7 then '🌱 une pousse' when 30 then '🌿 un arbuste' when 90 then '🌲 un arbre'
+    when 180 then '🌳 un chêne' when 365 then '🌍 un arbre-monde' end;
+$$;
+
 -- Destinataires et texte d'une notification (fonction Edge uniquement).
+-- Textes courts et humains : iOS ajoute déjà « from Grow » sous chaque notification.
 -- null = rien à envoyer (pas ami, pas partagé, déjà notifié…).
 create or replace function public.push_targets(p_sender uuid, p_kind text, p_other uuid default null) returns json
 language plpgsql security definer set search_path = public, private as $$
@@ -392,21 +413,26 @@ begin
   elsif p_kind = 'friend_request' then
     if p_other is null or not exists (select 1 from friendships where requester = p_sender and addressee = p_other and status = 'pending') then return null; end if;
     recipients := array[p_other];
-    v_title := 'Nouvelle demande d’ami'; v_body := who || ' veut t’ajouter en ami.'; v_tag := 'req-' || p_sender; v_ref := p_other::text;
+    v_title := who; v_body := 'Veut t’ajouter en ami 👋'; v_tag := 'req-' || p_sender; v_ref := p_other::text;
   elsif p_kind = 'friend_accept' then
     if p_other is null or not are_friends(p_sender, p_other) then return null; end if;
     recipients := array[p_other];
-    v_title := 'Demande acceptée 🎉'; v_body := who || ' a accepté ta demande. Dis-lui bonjour 👋';
+    v_title := who; v_body := 'A accepté ta demande 🎉 Dis-lui bonjour !';
     v_url := './#/friends/' || p_sender; v_tag := 'acc-' || p_sender; v_ref := p_other::text;
   elsif p_kind = 'mood' then
     -- Humeur partagée « pas bien » ou « bof » (1 ou 2 sur 5), du jour (date du téléphone, à un jour près).
     if not s.share or s.mood is null or s.mood > 2 or s.mood_date is null or s.mood_date < current_date - 1 then return null; end if;
-    v_title := who || ' ne va pas très fort aujourd’hui'; v_body := 'Un petit message pourrait faire du bien 💬';
+    v_title := who || ' n’a pas trop le moral'; v_body := 'Un petit mot de ta part lui ferait du bien 💬';
     v_url := './#/friends/' || p_sender; v_tag := 'mood-' || p_sender; v_ref := s.mood_date::text;
   elsif p_kind = 'perfect' then
     if not s.share or s.perfect_date is null or s.perfect_date < current_date - 1 then return null; end if;
-    v_title := '🔥 ' || who || ' a fait une journée parfaite';
-    v_body := case when coalesce(s.streak, 0) > 1 then s.streak || ' jours d’affilée ! Envoie-lui un bravo 👏' else 'Envoie-lui un bravo 👏' end;
+    if grow_new_stage(s.streak) is not null then
+      v_title := who || ' a maintenant ' || grow_new_stage(s.streak);
+      v_body := s.streak || ' jours d’affilée. Envoie-lui un bravo 👏';
+    else
+      v_title := '💧 ' || who || ' a arrosé ' || grow_stage(s.streak, 'sa');
+      v_body := case when coalesce(s.streak, 0) > 1 then s.streak || ' jours d’affilée. Un petit bravo ? 👏' else 'Un petit bravo ? 👏' end;
+    end if;
     v_url := './#/friends/' || p_sender; v_tag := 'perfect-' || p_sender; v_ref := s.perfect_date::text;
   else
     return null;
@@ -438,8 +464,9 @@ revoke execute on function public.push_config(), public.push_set_config(text, js
 grant execute on function public.push_config(), public.push_set_config(text, jsonb), public.push_drop(text),
   public.push_targets(uuid, text, uuid) to service_role;
 
--- --- Rappels du soir (« ta flamme va s'éteindre ») --------------------------------
--- L'app envoie son fuseau horaire, l'heure de rappel choisie, sa flamme et ce qu'il reste à faire.
+-- --- Rappels du soir (« ta pousse a soif ») -----------------------------------------
+-- L'app envoie son fuseau horaire, l'heure de rappel choisie, ses jours arrosés d'affilée (colonne flame)
+-- et ce qu'il reste à faire, en toutes lettres (« ta nuit et ton humeur »).
 -- Une tâche planifiée (pg_cron) appelle la fonction Edge « push » toutes les 15 minutes.
 alter table public.profiles add column if not exists tz text;
 alter table public.profiles add column if not exists remind_hour smallint check (remind_hour between 0 and 23);
@@ -484,12 +511,12 @@ begin
     'endpoint', s.endpoint, 'p256dh', s.p256dh, 'auth', s.auth, 'url', './', 'tag', 'rappel',
     'title', case
       when coalesce(d.flame, 0) > 0 and d.flame_date >= d.local_day - 1
-        then '🔥 Ta flamme de ' || d.flame || ' jour' || case when d.flame > 1 then 's' else '' end || ' va s’éteindre'
-      else 'Ta journée n’est pas encore complète'
+        then upper(left(grow_stage(d.flame, 'ta'), 1)) || substr(grow_stage(d.flame, 'ta'), 2) || ' a soif 💧'
+      else 'Ta graine attend un peu d’eau 💧'
     end,
     'body', case
-      when d.todo_date = d.local_day and coalesce(d.todo, '') <> '' then 'Il te reste : ' || d.todo || '.'
-      else 'Prends une minute pour remplir ta journée 🔥'
+      when d.todo_date = d.local_day and coalesce(d.todo, '') <> '' then 'Encore ' || d.todo || ' pour l’arroser.'
+      else 'Une minute pour remplir ta journée et l’arroser.'
     end
   )), '[]'::json) into result
   from due d

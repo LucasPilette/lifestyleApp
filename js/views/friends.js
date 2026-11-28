@@ -6,6 +6,7 @@ import { state } from '../core/store.js';
 import { back, navigate } from '../core/router.js';
 import { pageHeader, toast, confirmSheet, actionSheet, sheet, promptSheet } from '../core/ui.js';
 import { MOODS } from '../core/metrics.js';
+import { stageOf } from '../core/growth.js';
 import { dateKey, todayKey, agoLabel, formatShort, formatTime } from '../core/date.js';
 import { parseFriendCode, formatFriendCode } from '../core/prefs.js';
 import { haptic } from '../core/feedback.js';
@@ -32,12 +33,12 @@ function errorBox(e, retry) {
   return h('div', { class: 'empty' }, icon('users'), h('p', null, msg), retry ? h('button', { class: 'btn small', onClick: retry }, icon('refresh', 16), 'Réessayer') : null);
 }
 
-/** Statut partagé d'un ami (flamme du jour, humeur, dernière séance). */
+/** Statut partagé d'un ami (plante arrosée du jour, humeur, dernière séance). */
 function friendStatus(f, { long = false } = {}) {
   if (!f) return '';
   const today = todayKey();
   const parts = [];
-  if (f.perfect_date === today && f.streak) parts.push(long ? `🔥 ${f.streak} jour${f.streak > 1 ? 's' : ''} de flamme` : `🔥 ${f.streak}`);
+  if (f.perfect_date === today && f.streak) parts.push(long ? `${stageOf(f.streak).emoji} ${stageOf(f.streak).name} · ${f.streak} jour${f.streak > 1 ? 's' : ''} arrosé${f.streak > 1 ? 's' : ''}` : `${stageOf(f.streak).emoji} ${f.streak}`);
   if (f.mood != null && f.mood_date === today) parts.push(`${MOODS[f.mood].emoji}${long ? ` ${MOODS[f.mood].label.toLowerCase()}` : ''}`);
   if (!long && f.last_workout_at) parts.push(`💪 ${agoLabel(dateKey(new Date(f.last_workout_at)), today)}`);
   return parts.join(' · ');
@@ -64,7 +65,7 @@ export function friendsView(root) {
   async function shareCode() {
     const c = state.settings.friendCode;
     if (!c) return;
-    const text = `Ajoute-moi sur Eclipse avec mon code ami : ${formatFriendCode(c)}`;
+    const text = `Viens faire pousser ta graine avec moi sur Grow 🌱 Mon code ami : ${formatFriendCode(c)}`;
     try {
       if (navigator.share) await navigator.share({ text });
       else {
@@ -230,7 +231,7 @@ export function friendsView(root) {
   root.append(h('div', { class: 'view' },
     pageHeader({ title: 'Amis', onBack: () => back('/'), actions: [h('button', { class: 'icon-btn', 'aria-label': 'Actualiser', onClick: load }, icon('refresh', 20))] }),
     page));
-  helpOnce('friends', { title: 'Tes amis', iconName: 'users', text: ['« Mon code » : ton code à 6 chiffres à partager. « Ajouter » : entre celui d’un ami, il reçoit une demande.', '« Groupe » crée une discussion à plusieurs. Dans une discussion, partage ta flamme, tes records ou tes séances avec le bouton +.'] });
+  helpOnce('friends', { title: 'Tes amis', iconName: 'users', text: ['« Mon code » : ton code à 6 chiffres à partager. « Ajouter » : entre celui d’un ami, il reçoit une demande.', '« Groupe » crée une discussion à plusieurs. Dans une discussion, partage ta plante, tes records ou tes séances avec le bouton +.'] });
   return () => document.removeEventListener('visibilitychange', onVis);
 }
 
@@ -475,7 +476,7 @@ function conversationView(root, cfg) {
   header.querySelector('.topbar-title').replaceChildren(headBox);
   root.append(h('div', { class: 'view chat-view' }, header, h('div', { class: 'page' }, list)), bar);
   poll(true);
-  helpOnce('chat', { title: 'Discussion', iconName: 'message', text: ['Le bouton + partage une carte : ta flamme, un objectif atteint, un record, ta dernière séance ou une valeur du jour (pas, sommeil…).', 'Touche un message pour y réagir avec un émoji.'] });
+  helpOnce('chat', { title: 'Discussion', iconName: 'message', text: ['Le bouton + partage une carte : ta plante, un objectif atteint, un record, ta dernière séance ou une valeur du jour (pas, sommeil…).', 'Touche un message pour y réagir avec un émoji.'] });
 
   return {
     rerender: renderMessages,
@@ -638,7 +639,7 @@ export function groupChatView(root, groupId) {
     menu,
     group: true,
     member,
-    emptyText: 'Nouveau groupe ! Dis bonjour 👋 ou partage ta flamme avec le bouton +.',
+    emptyText: 'Nouveau groupe ! Dis bonjour 👋 ou partage ta plante avec le bouton +.',
   });
   reload().catch(() => {});
   return view.cleanup;

@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Logo de Grow : une graine qui germe, posée sur l'horizon d'une planète endormie. -->
+  <defs>
+    <radialGradient id="sky" cx="0.5" cy="0.3" r="0.85">
+      <stop offset="0" stop-color="#2d2468"/><stop offset="0.6" stop-color="#16123a"/><stop offset="1" stop-color="#0b0a1c"/>
+    </radialGradient>
+    <linearGradient id="seed" x1="0.1" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#ffd98a"/><stop offset="0.5" stop-color="#ff8a52"/><stop offset="1" stop-color="#e3436b"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ff8a52" stop-opacity="0.5"/><stop offset="1" stop-color="#ff8a52" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="planet" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#261e56"/><stop offset="1" stop-color="#100d28"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#sky)"/>
+  <g fill="#ffe7c2">
+    <circle cx="92" cy="104" r="3.5" opacity="0.7"/><circle cx="414" cy="118" r="2.5" opacity="0.6"/><circle cx="436" cy="262" r="3" opacity="0.5"/>
+    <circle cx="66" cy="270" r="2.5" opacity="0.45"/><circle cx="360" cy="54" r="2" opacity="0.5"/><circle cx="156" cy="50" r="2" opacity="0.4"/>
+  </g>
+  <circle cx="250" cy="280" r="175" fill="url(#halo)"/>
+  <g transform="translate(244 292)">
+    <g transform="rotate(30)">
+      <path d="M0 -104C66 -60 68 46 0 100C-68 46 -66 -60 0 -104Z" fill="url(#seed)"/>
+      <path d="M0 -80C14 -30 14 30 0 78" fill="none" stroke="#fff3d9" stroke-opacity="0.55" stroke-width="10" stroke-linecap="round"/>
+      <ellipse cx="-26" cy="-14" rx="11" ry="34" fill="#fff" opacity="0.2"/>
+    </g>
+    <path d="M52 -90C56 -110 52 -126 44 -140" fill="none" stroke="#ffe2a8" stroke-width="10" stroke-linecap="round"/>
+    <path d="M44 -136C30 -160 4 -166 -14 -156C-4 -136 20 -128 44 -136Z" fill="#ffe2a8"/>
+    <path d="M46 -138C54 -166 78 -178 100 -172C94 -148 72 -136 46 -138Z" fill="#ffe2a8"/>
+  </g>
+  <ellipse cx="256" cy="650" rx="440" ry="262" fill="url(#planet)"/>
+  <ellipse cx="256" cy="650" rx="440" ry="262" fill="none" stroke="#ff8a52" stroke-opacity="0.55" stroke-width="3"/>
+</svg>
