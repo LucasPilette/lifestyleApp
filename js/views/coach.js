@@ -86,13 +86,14 @@ export default function coachView(root) {
           h('div', { class: 'tpl-name' }, h('span', { class: 'tpl-dot' }), t.name),
           t.subtitle ? h('div', { class: 'tpl-sub' }, t.subtitle) : null),
         h('span', { class: 'chip' }, `≈ ${estimateMinutes(t)} min`)),
-      h('div', { class: 'coach-ex' }, t.blocks.map((b) => b.items.map((it, i) =>
+      h('div', { class: 'coach-ex' }, t.blocks.map((b) => b.items.map((it, i) => [
         h('div', { class: 'coach-ex-row' },
           b.items.length > 1 ? h('span', { class: 'ex-letter' }, String.fromCharCode(65 + i)) : null,
           h('span', { class: 'coach-ex-name' }, exName(it.exerciseId), it.warmup ? h('em', null, ' · échauff.') : null),
           h('span', { class: 'coach-ex-sets tnum' }, it.sets.map((g) => `${g.n}×${fmtRange(g.min, g.max)}`).join(' + '),
             i === b.items.length - 1 ? ` · ${fmtRest(b.rest)}` : '')),
-        it.note ? h('div', { class: 'coach-ex-note' }, it.note) : null))));
+        it.note ? h('div', { class: 'coach-ex-note' }, it.note) : null,
+      ]))));
   }
 
   let pendingNames = new Map();
