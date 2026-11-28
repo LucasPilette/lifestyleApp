@@ -105,8 +105,11 @@ create index if not exists messages_pair on public.messages (sender, recipient, 
 create index if not exists messages_unread on public.messages (recipient) where read_at is null;
 -- Cartes partagées (payload : flamme, objectif, record, séance, valeur du jour ; body = texte de repli),
 -- réactions { "<id utilisateur>": "🔥" }, et updated_at pour récupérer réactions et « lu » en direct.
-alter table public.messages add column if not exists payload jsonb
-  check (payload is null or (jsonb_typeof(payload) = 'object' and pg_column_size(payload) < 2048));
+alter table public.messages add column if not exists payload jsonb;
+-- Taille d'une carte : 16 Ko au plus (un programme complet partagé tient en 4 à 8 Ko).
+alter table public.messages drop constraint if exists messages_payload_check;
+alter table public.messages add constraint messages_payload_check
+  check (payload is null or (jsonb_typeof(payload) = 'object' and pg_column_size(payload) < 16384));
 alter table public.messages add column if not exists reactions jsonb not null default '{}'::jsonb;
 alter table public.messages add column if not exists updated_at timestamptz not null default now();
 create index if not exists messages_updated on public.messages (updated_at);

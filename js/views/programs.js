@@ -9,6 +9,8 @@ import { actionSheet, confirmSheet, pageHeader, stepper, toggle, toast, promptSh
 import { debounce, uid, clone } from '../core/util.js';
 import { pickExercise, editExercise } from '../components/exercise-picker.js';
 import { estimateMinutes } from './train.js';
+import { templateCard, programCard } from '../core/share.js';
+import { openSendToSheet } from '../components/share-sheet.js';
 
 const newItem = (exerciseId) => ({ id: uid(), exerciseId, alternatives: [], sets: [{ n: 3, min: 8, max: 12, tag: '' }], warmup: false, note: '' });
 
@@ -52,6 +54,7 @@ export function programsView(root) {
       h('p', { class: 'muted', style: { fontSize: '13.5px', margin: '0 4px' } }, 'L’ordre détermine la séance suggérée : après une séance vient la suivante de la liste.'),
       list,
       h('button', { class: 'btn primary block', onClick: create }, icon('plus', 18), 'Nouvelle séance'),
+      state.templates.length ? h('button', { class: 'btn block', onClick: () => openSendToSheet(programCard(state.templates, state.exercises, state.settings.name), { title: 'Partager mon programme' }) }, icon('share', 18), 'Partager mon programme') : null,
       h('button', { class: 'btn block', onClick: () => navigate('/coach') }, icon('zap', 18), 'Créer un programme avec le coach IA'),
       h('button', { class: 'btn ghost block', onClick: async () => { const ex = await editExercise({}); if (ex) toast(`« ${ex.name} » ajouté à tes exercices`); } }, icon('dumbbell', 18), 'Créer un exercice'))));
 }
@@ -201,10 +204,14 @@ export function programEditView(root, id) {
 
   async function templateMenu() {
     const c = await actionSheet(t.name, [
+      { id: 'share', label: 'Partager avec un ami ou un groupe', icon: 'share' },
       { id: 'dup', label: 'Dupliquer la séance', icon: 'copy' },
       { id: 'del', label: 'Supprimer la séance', icon: 'trash', danger: true },
     ]);
-    if (c === 'dup') {
+    if (c === 'share') {
+      save.pending();
+      openSendToSheet(templateCard(t, state.exercises), { title: 'Partager la séance' });
+    } else if (c === 'dup') {
       const copy = clone(t);
       copy.id = uid();
       copy.name = `${t.name} (copie)`;

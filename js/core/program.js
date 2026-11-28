@@ -73,7 +73,7 @@ export function programToTemplates(raw, exercises, { startOrder = 0, now = Date.
     const order = startOrder + templates.length;
     templates.push({
       id: uid(), name: text(s.name, 40) || `Séance ${si + 1}`, subtitle: text(s.subtitle, 80),
-      color: TEMPLATE_COLORS[order % TEMPLATE_COLORS.length], order, blocks, createdAt: now,
+      color: /^#[0-9a-f]{6}$/i.test(String(s.color || '')) ? s.color : TEMPLATE_COLORS[order % TEMPLATE_COLORS.length], order, blocks, createdAt: now,
     });
   }
   // Les exercices créés mais jamais utilisés ne sont pas ajoutés à la bibliothèque.

@@ -629,3 +629,89 @@ test('carte de séance : durée, records et détail des exercices', async () => 
   // Les lignes reçues sont bornées
   assert.equal(sh.cleanCard({ type: 'session', lines: Array(20).fill('x'.repeat(200)) }).lines.length, 8);
 });
+
+test('partage de séances et programmes : aller-retour jusqu’à l’import', async () => {
+  const sh = await import('../js/core/share.js');
+  const { programToTemplates } = await import('../js/core/program.js');
+  const zeus = upperA;
+  const tc = sh.templateCard(zeus, exercises);
+  assert.equal(tc.payload.type, 'template');
+  assert.equal(tc.payload.template.blocks.length, zeus.blocks.length);
+  assert.ok(tc.body.startsWith('📋 Séance à essayer : Zeus'));
+  // Import chez un ami qui a la même bibliothèque : exercices réutilisés, plan et repos conservés
+  const imported = programToTemplates(sh.sharedToProgram([sh.cleanCard(tc.payload).template]), exercises, { startOrder: 3 });
+  const t = imported.templates[0];
+  assert.equal(t.name, 'Zeus');
+  assert.equal(t.order, 3);
+  assert.equal(t.color, zeus.color);
+  assert.equal(imported.newExercises.length, 0);
+  assert.equal(t.blocks[0].items[0].exerciseId, 'bench');
+  assert.deepEqual(t.blocks[0].items[0].sets.map((g) => [g.n, g.min, g.max, g.tag]), [[3, 3, 5, 'Lourd'], [2, 8, 8, 'Léger']]);
+  assert.equal(t.blocks[0].rest, zeus.blocks[0].rest);
+  // Chez un ami sans cet exercice : il est créé
+  const lib = new Map([...exercises].filter(([id]) => id !== 'reverse_pec_deck'));
+  const imp2 = programToTemplates(sh.sharedToProgram([sh.cleanCard(tc.payload).template]), lib);
+  assert.deepEqual(imp2.newExercises.map((e) => e.name), ['Pec deck inversé']);
+  // Programme complet
+  const pc = sh.programCard(templates, exercises, 'Lucas');
+  assert.equal(pc.payload.program.name, 'Programme de Lucas');
+  assert.equal(sh.cleanCard(pc.payload).program.templates.length, 4);
+  assert.ok(JSON.stringify(pc.payload).length < 12000, `taille ${JSON.stringify(pc.payload).length}`);
+  // Données reçues bornées
+  const evil = sh.cleanCard({ type: 'template', template: { name: 'x', blocks: Array(40).fill({ rest: 99999, items: [{ name: 'A', load: 'nope', plan: [[99, -5, 1000, 'tag'.repeat(10)]] }] }) } });
+  assert.equal(evil.template.blocks.length, 15);
+  assert.deepEqual(evil.template.blocks[0].items[0].plan[0], [8, 1, 60, 'tagtagtagtagta']);
+  assert.equal(evil.template.blocks[0].rest, 600);
+  assert.equal(evil.template.blocks[0].items[0].load, 'kg');
+});
+
+test('carte de séance réalisée : performances et plan importables', async () => {
+  const sh = await import('../js/core/share.js');
+  const s = done('upper-a', new Date(2026, 10, 24, 18).getTime(), { bench: [[105, 5], [105, 4]] });
+  s.blocks[0].items[0].plan = { sets: [{ n: 3, min: 3, max: 5, tag: 'Lourd' }], warmup: true };
+  const c = sh.sessionCard(s, exercises, 80);
+  const it = c.payload.session.blocks[0].items[0];
+  assert.deepEqual([it.name, it.plan, it.done, it.warmup], ['Développé couché', [[3, 3, 5, 'Lourd']], [[105, 5], [105, 4]], true]);
+  assert.equal(c.payload.session.sets, 2);
+});
+
+test('graphique partagé : 7 jours de sommeil', async () => {
+  const sh = await import('../js/core/share.js');
+  const today = '2026-11-27';
+  const days = new Map([['2026-11-27', { sleepMin: 420 }], ['2026-11-25', { sleepMin: 480 }], ['2026-11-10', { sleepMin: 300 }]]);
+  const c = sh.chartCard(days, 'sleepMin', today, { range: 7, goal: 480 });
+  assert.equal(c.payload.chart.values.length, 7);
+  assert.deepEqual(c.payload.chart.values.filter((v) => v != null), [480, 420]);
+  assert.equal(c.payload.chart.goal, 480);
+  assert.equal(c.payload.value, '7 h 30 en moyenne');
+  assert.equal(c.payload.sub, '7 derniers jours · 2 j renseignés');
+  assert.equal(sh.chartCard(new Map(), 'steps', today), null);
+  const water = { id: 'cw_eau', kind: 'number', name: 'Eau', unit: 'verres', emoji: '💧', color: '#22c3d6', target: 8 };
+  const cw = sh.chartCard(new Map([['2026-11-27', { custom: { cw_eau: 6 } }]]), 'custom', today, { custom: water });
+  assert.equal(cw.payload.chart.goal, 8);
+  assert.equal(cw.payload.title, 'Eau');
+  assert.equal(sh.cleanCard({ type: 'chart', chart: { field: 'x', values: ['a', null] } }).chart, undefined);
+});
+
+test('phrase d’accueil : naturelle selon l’heure, le reste à faire, la flamme et les séances', async () => {
+  const { greetingMessage, frenchList } = await import('../js/core/greeting.js');
+  const today = '2026-11-27';
+  const items = ['sleep', 'nutrition', 'mood'];
+  const c = (day) => dayChecklist(new Map([[today, day]]), today, items);
+  assert.equal(frenchList(['a', 'b', 'c']), 'a, b et c');
+  assert.equal(greetingMessage(c({}), true, null, { hour: 8 }), 'Bien dormi ? Commence par noter ta nuit.');
+  assert.equal(greetingMessage(c({}), true, null, { hour: 14 }), 'Quand tu as une minute, note ta nuit, tes repas et ton humeur.');
+  assert.equal(greetingMessage(c({}), true, null, { hour: 21 }), 'Prends une minute pour noter ta nuit, tes repas et ton humeur 🌙');
+  assert.equal(greetingMessage(c({ sleepMin: 420, sleepQ: 4 }), true, null, { hour: 14 }), 'Encore tes repas et ton humeur pour une journée parfaite.');
+  assert.equal(greetingMessage(c({ sleepMin: 420, sleepQ: 4, mood: 4 }), true, null, { hour: 14 }), 'Plus que tes repas pour une journée parfaite.');
+  assert.equal(greetingMessage(c({ sleepMin: 420, sleepQ: 4, mood: 4 }), true, null, { hour: 21 }), 'Plus que tes repas et ta journée est parfaite 🌙');
+  const full = { sleepMin: 420, sleepQ: 4, mood: 4, kcal: 2400, prot: 150 };
+  assert.equal(greetingMessage(c(full), true, null, { streak: 12 }), '12 jours d’affilée, ta flamme brille 🔥');
+  assert.equal(greetingMessage(c(full), true, null, { streak: 1 }), 'Journée parfaite, ta flamme est allumée 🔥');
+  // Séances de la semaine
+  assert.equal(greetingMessage(c(full), true, { needed: 1, daysLeft: 4 }, { streak: 3 }), '3 jours d’affilée, ta flamme brille 🔥 Encore une séance cette semaine et ta flamme est à l’abri.');
+  assert.equal(greetingMessage(c(full), true, { needed: 2, daysLeft: 2 }, { streak: 1 }), 'Journée parfaite, ta flamme est allumée 🔥 Il te faut encore 2 séances d’ici dimanche pour garder ta flamme.');
+  // Jour passé, sans critère quotidien
+  assert.equal(greetingMessage(c({ mood: 3 }), false, null), 'Ce jour-là, il manquait ta nuit et tes repas.');
+  assert.equal(greetingMessage(dayChecklist(new Map(), today, []), true, null), 'Belle journée à toi ✨');
+});

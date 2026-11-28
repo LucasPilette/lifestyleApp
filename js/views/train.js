@@ -4,6 +4,8 @@ import { h, icon } from '../core/dom.js';
 import { state, activeSession, doneSessions, exerciseName, saveSession, deleteSession, templateColor, saveTemplate } from '../core/store.js';
 import { exampleProgram } from '../core/program.js';
 import { helpOnce } from '../components/tour.js';
+import { templateCard } from '../core/share.js';
+import { openSendToSheet } from '../components/share-sheet.js';
 import { uid } from '../core/util.js';
 import { createSession, suggestTemplate } from '../core/training.js';
 import { agoLabel, dateKey } from '../core/date.js';
@@ -109,6 +111,7 @@ export default function trainView(root) {
             ));
         })),
       h('button', { class: 'btn block tc-btn', style: { height: '56px', fontSize: '17px', '--tc': tc }, onClick: () => { close(); start(t); } }, icon('play', 20), 'Commencer la séance'),
+      h('button', { class: 'btn ghost block', onClick: () => { close(); openSendToSheet(templateCard(t, state.exercises, tc), { title: 'Partager la séance' }); } }, icon('share', 18), 'Partager avec un ami ou un groupe'),
     ], { title: t.name, cls: 'tc-sheet', style: { '--tc': tc } });
   }
 

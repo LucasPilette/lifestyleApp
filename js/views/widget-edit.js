@@ -107,10 +107,12 @@ export default function widgetEditView(root, id) {
       const unit = h('input', { class: 'text-input', type: 'text', value: w.unit || '', maxlength: 12, placeholder: 'Unité (verres, min, pages…)' });
       unit.addEventListener('input', () => { w.unit = unit.value.trim(); });
       const target = numInput({ value: w.target != null ? String(w.target).replace('.', ',') : '', placeholder: 'Facultatif', decimal: true, label: 'Objectif du jour', onInput: (e) => { w.target = parseNum(e.target.value); } });
+      const step = numInput({ value: w.step != null ? String(w.step).replace('.', ',') : '', placeholder: '1', decimal: true, label: 'Pas des boutons + et −', onInput: (e) => { w.step = parseNum(e.target.value); } });
       return [
         h('div', { class: 'field-label' }, 'Unité'), unit,
         h('div', { class: 'field-label' }, 'Objectif du jour'), target,
         segmented([['min', 'Au moins'], ['max', 'Au plus']], w.dir || 'min', (v) => { w.dir = v; }),
+        h('div', { class: 'field-label' }, 'Pas des boutons + et − (ex. 1 verre, 0,5 L)'), step,
         h('div', { class: 'ed-line' }, h('span', null, 'Valeurs à virgule'), toggle(!!w.decimals, (v) => { w.decimals = v; }, 'Décimales')),
       ];
     }
@@ -159,7 +161,7 @@ export default function widgetEditView(root, id) {
     const clean = { id: w.id, kind: w.kind, name: w.name, emoji: w.emoji, color: w.color };
     if (w.kind === 'checklist') clean.items = w.items;
     if (w.kind === 'emoji') clean.emojis = w.emojis;
-    if (w.kind === 'number') Object.assign(clean, { unit: w.unit || '', target: w.target ?? null, dir: w.dir || 'min', decimals: !!w.decimals });
+    if (w.kind === 'number') Object.assign(clean, { unit: w.unit || '', target: w.target ?? null, dir: w.dir || 'min', decimals: !!w.decimals || (w.step > 0 && !Number.isInteger(w.step)), step: w.step > 0 ? w.step : 1 });
     const list = existing ? customs.map((c) => (c.id === w.id ? clean : c)) : [...customs, clean];
     const widgets = cleanWidgets(st.widgets, list);
     const flame = (st.flame || []).filter((x) => x !== w.id);

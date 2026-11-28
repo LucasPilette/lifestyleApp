@@ -9,20 +9,52 @@ import { sheet } from '../core/ui.js';
 import { todayKey, dateKey, relativeDay } from '../core/date.js';
 import { perfectStreak } from '../core/metrics.js';
 import { flameRules, cleanWidgets } from '../core/prefs.js';
-import { flameCard, goalCard, recentRecords, recordCard, sessionCard, dayCards, cleanCard } from '../core/share.js';
+import { flameCard, goalCard, recentRecords, recordCard, sessionCard, dayCards, cleanCard, chartCard, templateCard, programCard } from '../core/share.js';
+import { openCardDetail } from './share-detail.js';
+import { mountChart } from './chart.js';
+import { METRICS } from '../core/metrics.js';
+import { fmtNum } from '../core/format.js';
 import { evaluateAll } from '../views/goals.js';
 
-/** Bulle de carte (envoyée ou reçue). */
+/** Graphique d'une carte (une seule série : le titre de la carte la nomme, pas de légende). */
+function cardChart(c) {
+  const ch = c.chart;
+  const m = METRICS[ch.field];
+  const fmt = m ? m.fmt : (v) => `${fmtNum(v, ch.decimals ? 1 : 0)}${ch.unit ? ` ${ch.unit}` : ''}`;
+  const host = h('div', { class: 'chat-card-chart' });
+  mountChart(host, {
+    type: ch.kind,
+    points: ch.values.map((v, i) => ({ label: ch.labels[i] || '', value: v, tip: ch.labels[i] || '' })),
+    color: c.color || m?.color || 'var(--accent)',
+    goal: ch.goal,
+    maxY: ch.maxY ?? m?.maxY,
+    step: m?.step,
+    format: fmt,
+    tick: m ? m.tick : (v) => fmtNum(v, ch.decimals ? 1 : 0),
+    height: 130,
+    ariaLabel: `${c.title}, ${c.sub}`,
+  });
+  // Toucher le graphique (valeur du jour) ne doit pas ouvrir les réactions de la bulle.
+  host.addEventListener('click', (e) => e.stopPropagation());
+  return host;
+}
+
 /**
- * Bulle de carte. Le détail (performances d'une séance) est replié : il se déplie au toucher de
- * « Voir les performances », pour ne pas prendre de place dans la discussion.
- * open / onToggle : garder le détail déplié quand la discussion se redessine.
+ * Bulle de carte. Séance, séance type ou programme : « Voir plus » ouvre le détail complet (avec import).
+ * Anciennes cartes de séance (texte seul) : détail repliable « Voir les performances ».
+ * open / onToggle : garder ce détail déplié quand la discussion se redessine ; from : prénom de l'expéditeur.
  */
-export function renderCard(payload, { mini = false, open = false, onToggle } = {}) {
+export function renderCard(payload, { mini = false, open = false, onToggle, from = '' } = {}) {
   const c = cleanCard(payload);
   if (!c) return null;
   let details = null;
-  if (c.lines.length && !mini) {
+  let chart = null; // graphique : sur sa propre ligne, toute la largeur de la carte
+  if (!mini && (c.session || c.template || c.program)) {
+    details = h('button', { class: 'chat-card-more', onClick: (e) => { e.stopPropagation(); openCardDetail(c, { from }); } },
+      c.session ? 'Voir plus' : c.program ? 'Voir le programme' : 'Voir la séance', icon('chevron', 15));
+  } else if (!mini && c.chart) {
+    chart = cardChart(c);
+  } else if (c.lines.length && !mini) {
     const n = c.lines.length;
     details = h('details', { class: 'chat-card-details', open },
       h('summary', null, h('span', null, `Voir les performances (${n})`), icon('down', 15, 'chat-card-caret')),
@@ -31,13 +63,14 @@ export function renderCard(payload, { mini = false, open = false, onToggle } = {
     details.addEventListener('click', (e) => e.stopPropagation());
     details.addEventListener('toggle', () => onToggle?.(details.open));
   }
-  return h('div', { class: `chat-card ${mini ? 'mini' : ''} t-${c.type}`, style: c.color ? { '--cc': c.color } : null },
+  return h('div', { class: `chat-card ${mini ? 'mini' : ''} t-${c.type} ${c.chart && !mini ? 'has-chart' : ''}`, style: c.color ? { '--cc': c.color } : null },
     h('span', { class: 'chat-card-emoji', 'aria-hidden': 'true' }, c.emoji),
     h('div', { class: 'chat-card-body' },
       h('span', { class: 'chat-card-title' }, c.title),
       h('b', { class: 'chat-card-value' }, c.value),
       c.sub ? h('span', { class: 'chat-card-sub' }, c.sub) : null,
-      details));
+      details),
+    chart);
 }
 
 /**
@@ -112,12 +145,28 @@ export function openShareSheet(onPick) {
     const customs = state.settings.customWidgets || [];
     const today = dayCards(getDay(todayKey()) || {}, cleanWidgets(state.settings.widgets, customs), customs);
 
+    // Graphiques des 7 derniers jours (30 pour le poids) sur les widgets affichés
+    const widgets = cleanWidgets(state.settings.widgets, customs);
+    const dailyGoals = state.settings.goals;
+    const charts = [];
+    const add = (c) => c && charts.push(c);
+    if (widgets.includes('sleep')) add(chartCard(state.days, 'sleepMin', todayKey(), { goal: dailyGoals.sleepMin }));
+    if (widgets.includes('mood')) add(chartCard(state.days, 'mood', todayKey()));
+    if (widgets.includes('steps')) add(chartCard(state.days, 'steps', todayKey(), { goal: dailyGoals.steps }));
+    if (widgets.includes('nutrition')) add(chartCard(state.days, 'kcal', todayKey(), { goal: dailyGoals.kcal }));
+    if (widgets.includes('weight')) add(chartCard(state.days, 'weight', todayKey(), { range: 30 }));
+    for (const cw of customs) if (widgets.includes(cw.id) && (cw.kind === 'number' || cw.kind === 'emoji')) add(chartCard(state.days, 'custom', todayKey(), { custom: cw }));
+    const tpls = state.templates.map((t) => templateCard(t, state.exercises));
+    if (state.templates.length > 1) tpls.unshift(programCard(state.templates, state.exercises, state.settings.name));
+
     const items = [
       ...section('Ma flamme', [flameCard(myStreak())]),
       ...section('Aujourd’hui', today),
       ...section('Mes objectifs', goals),
       ...section('Mes records', records),
       ...section('Ma dernière séance', last ? [sessionCard(last, state.exercises, bw, sessionColor(last) || '', state.sessions)] : []),
+      ...section('Mes graphiques', charts),
+      ...section('Mes séances et mon programme', tpls),
     ];
     return [h('p', { class: 'sheet-text' }, 'Choisis ce que tu veux partager : ton ami le reçoit sous forme de carte.'), ...items];
   }, { title: 'Partager' });

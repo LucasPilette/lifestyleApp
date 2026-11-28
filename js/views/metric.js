@@ -1,12 +1,14 @@
 // Suivi détaillé d'un indicateur : graphiques par jours / semaines / mois et statistiques.
 
-import { h } from '../core/dom.js';
+import { h, icon } from '../core/dom.js';
+import { chartCard } from '../core/share.js';
+import { openSendToSheet } from '../components/share-sheet.js';
 import { state } from '../core/store.js';
 import { todayKey, formatShort, relativeDay } from '../core/date.js';
 import { METRICS, MOODS, periodData, summary } from '../core/metrics.js';
 import { mountChart } from '../components/chart.js';
 import { back, navigate } from '../core/router.js';
-import { pageHeader, segmented } from '../core/ui.js';
+import { pageHeader, segmented, actionSheet, toast } from '../core/ui.js';
 import { fmtDelta, fmtNum } from '../core/format.js';
 import { QUALITY_LABELS } from './home.js';
 
@@ -52,7 +54,8 @@ export default function metricView(root, pageId) {
             h('div', { class: 'hero-value' }, data.current != null ? m.fmt(data.current) : '–')),
           h('div', { class: 'hero-delta' }, delta != null ? [fmtDelta(delta, m.fmtDelta), h('br'), data.previousLabel] : '')),
         host,
-        legend,
+        h('div', { class: 'metric-foot' }, legend,
+          h('button', { class: 'btn small ghost', onClick: () => shareChart(field, goal) }, icon('share', 15), 'Partager')),
         statsGrid(field, goal)));
       charts.push(mountChart(host, {
         type: m.chart || 'bar',
@@ -69,6 +72,18 @@ export default function metricView(root, pageId) {
         ariaLabel: `${m.label}, ${PERIODS.find((p) => p[0] === period)[1]}`,
       }));
     }
+  }
+
+  /** Partager l'évolution de la donnée (7 ou 30 derniers jours) avec un ami ou un groupe. */
+  async function shareChart(field, goal) {
+    const c = await actionSheet(`Partager · ${METRICS[field].label}`, [
+      { id: 7, label: '7 derniers jours', icon: 'chart' },
+      { id: 30, label: '30 derniers jours', icon: 'calendar' },
+    ]);
+    if (!c) return;
+    const card = chartCard(state.days, field, today, { range: c, goal });
+    if (!card) return toast('Aucune valeur sur cette période');
+    openSendToSheet(card, { title: 'Partager le graphique' });
   }
 
   function statsGrid(field, goal) {

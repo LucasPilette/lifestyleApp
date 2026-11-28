@@ -349,7 +349,8 @@ function conversationView(root, cfg) {
         lastSender = null;
       }
       const mine = m.sender === me;
-      const card = m.payload ? renderCard(m.payload, { open: expanded.has(m.id), onToggle: (o) => (o ? expanded.add(m.id) : expanded.delete(m.id)) }) : null;
+      const fromName = mine ? '' : cfg.member?.(m.sender)?.name || cfg.peerName?.() || '';
+      const card = m.payload ? renderCard(m.payload, { open: expanded.has(m.id), onToggle: (o) => (o ? expanded.add(m.id) : expanded.delete(m.id)), from: fromName }) : null;
       const author = cfg.group && !mine ? cfg.member?.(m.sender) : null;
       const showAuthor = !!author && m.sender !== lastSender;
       lastSender = m.sender;
@@ -515,6 +516,7 @@ export function chatView(root, friendId) {
     header: { avatar: avatarBox, title, sub },
     menu,
     receipts: true,
+    peerName: () => friendCache.get(friendId)?.name || '',
   });
 
   social.listFriends().then((l) => {

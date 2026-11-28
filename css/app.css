@@ -1834,3 +1834,63 @@ body::before {
 .chat-card-caret { transition: transform 0.2s; }
 .chat-card-details[open] .chat-card-caret { transform: rotate(180deg); }
 .chat-card-details .chat-card-lines { margin-top: 2px; }
+
+/* Widget chiffre : boutons − / + */
+.cw-num { display: flex; align-items: center; gap: 8px; }
+.cw-num .with-unit { flex: 1; }
+.cw-num .num-input { text-align: center; padding-left: 46px; }
+.cw-step {
+  flex: none; width: 52px; height: 44px; border-radius: 14px; display: grid; place-items: center;
+  color: color-mix(in srgb, var(--c) 70%, var(--mix-hi)); background: color-mix(in srgb, var(--c) 16%, rgb(var(--lo) / calc(0.2 * var(--lo-k))));
+  border: 1px solid color-mix(in srgb, var(--c) 35%, transparent); transition: transform 0.08s;
+}
+.cw-step:active { transform: scale(0.9); }
+.cw-step.plus { color: #0b0d10; background: var(--c); border-color: transparent; box-shadow: 0 4px 14px color-mix(in srgb, var(--c) 35%, transparent); }
+
+/* ==========================================================================
+   Cartes : « Voir plus », graphiques ; fenêtre de détail d'une séance / d'un programme
+   ========================================================================== */
+.chat-card-more {
+  display: inline-flex; align-items: center; gap: 4px; margin-top: 8px; height: 32px; padding: 0 12px; border-radius: 16px; align-self: flex-start;
+  font-size: 13px; font-weight: 800; color: var(--text-hi); background: color-mix(in srgb, var(--cc) 30%, rgb(var(--hi) / 0.06));
+  border: 1px solid color-mix(in srgb, var(--cc) 45%, transparent);
+}
+.chat-card-more:active { transform: scale(0.97); }
+.chat-card.has-chart { flex-wrap: wrap; width: min(330px, 78vw); }
+.chat-card.has-chart .chat-card-body { flex: 1; }
+.chat-card-chart { width: 100%; margin-top: 8px; }
+.chat-card-chart .chart-tip { font-size: 11.5px; }
+.metric-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+
+.sd-sheet .sheet-body { gap: 10px; }
+.sd-by { font-size: 12.5px; font-weight: 700; color: var(--text-2); }
+.sd-head {
+  --cc: var(--accent);
+  display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 18px;
+  background: linear-gradient(140deg, color-mix(in srgb, var(--cc) 28%, var(--sheet-1)), color-mix(in srgb, var(--cc) 10%, var(--sheet-2)));
+  border: 1px solid color-mix(in srgb, var(--cc) 40%, transparent);
+}
+.sd-head .chat-card-emoji { background: color-mix(in srgb, var(--cc) 30%, rgb(var(--lo) / calc(0.25 * var(--lo-k)))); }
+.sd-title { font-family: var(--font-round); font-size: 20px; font-weight: 800; display: block; }
+.sd-meta { font-size: 13px; color: var(--text-2); }
+.sd-rec { font-size: 13px; font-weight: 700; color: #ffc23d; margin-top: 2px; }
+[data-mode="light"] .sd-rec { color: #a87400; }
+.sd-block { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 16px; background: rgb(var(--hi) / 0.05); border: 1px solid rgb(var(--hi) / 0.08); }
+.sd-block.superset { border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
+.sd-ss { display: flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 800; color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 2px; }
+.sd-item + .sd-item { margin-top: 8px; padding-top: 8px; border-top: 1px dashed rgb(var(--hi) / 0.12); }
+.sd-name { display: flex; align-items: center; gap: 8px; font-size: 15.5px; }
+.sd-name .chip { height: 22px; font-size: 11.5px; }
+.sd-plan { font-size: 13px; color: var(--text-2); margin-top: 2px; }
+.sd-sets { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.sd-set { font-size: 12.5px; font-weight: 700; padding: 3px 8px; border-radius: 10px; background: rgb(var(--hi) / 0.08); }
+.sd-note { font-size: 12.5px; color: var(--text-3); font-style: italic; margin-top: 4px; }
+.sd-hint { font-size: 12.5px; color: var(--text-3); text-align: center; line-height: 1.45; }
+.sd-tpl { --cc: var(--accent); border-radius: 16px; background: rgb(var(--hi) / 0.04); border: 1px solid rgb(var(--hi) / 0.08); padding: 4px 10px 10px; }
+.sd-tpl summary { list-style: none; display: flex; align-items: center; gap: 8px; padding: 8px 0; cursor: pointer; }
+.sd-tpl summary::-webkit-details-marker { display: none; }
+.sd-tpl summary b { flex: 1; font-size: 16px; }
+.sd-tpl .tpl-dot { --tc: var(--cc); }
+.sd-tpl[open] .chat-card-caret { transform: rotate(180deg); }
+.sd-tpl .sd-block { margin-bottom: 6px; }
+.chat-card.has-chart .chat-card-chart { flex-basis: 100%; margin-top: 4px; }

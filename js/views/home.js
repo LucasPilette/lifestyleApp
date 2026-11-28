@@ -15,6 +15,7 @@ import { inboxCount } from '../core/social.js';
 import { habitsEditor } from '../components/prefs-ui.js';
 import { haptic } from '../core/feedback.js';
 import { dayRings } from '../components/ring.js';
+import { greetingMessage } from '../core/greeting.js';
 import { openCalendar } from '../components/calendar.js';
 import { openSideMenu } from '../components/side-menu.js';
 
@@ -31,27 +32,6 @@ export function sessionDateList() {
 /** Jours où une séance a été terminée. */
 export function sessionDaySet() {
   return new Set(doneSessions().map((s) => dateKey(new Date(s.startedAt))));
-}
-
-/**
- * Message d'accueil selon la journée (c = dayChecklist) et la semaine d'entraînement (wk = weekTraining).
- */
-export function greetingMessage(c, isToday, wk) {
-  if (!isToday) {
-    if (!c.items.length) return '';
-    return c.perfect ? 'Journée parfaite. 🔥' : `Il manquait : ${c.missing.join(', ')}.`;
-  }
-  const plural = (n, w) => `${n} ${w}${n > 1 ? 's' : ''}`;
-  let training = '';
-  if (wk && wk.needed > 0) {
-    training = wk.needed >= wk.daysLeft
-      ? ` Attention : encore ${plural(wk.needed, 'séance')} d’ici dimanche pour garder ta flamme.`
-      : ` Encore ${plural(wk.needed, 'séance')} cette semaine pour garder ta flamme.`;
-  }
-  if (!c.items.length) return training.trim() || 'Belle journée ! ✨';
-  if (c.perfect) return `Journée parfaite. 🔥${training}`;
-  if (c.done === 0) return `Au programme aujourd’hui : ${c.missing.join(', ')}.${training}`;
-  return `Il te reste à renseigner : ${c.missing.join(', ')}.${training}`;
 }
 
 export default function home(root, dateParam) {
@@ -113,7 +93,6 @@ export default function home(root, dateParam) {
 
   // --- Salutation, message et anneau du jour (flamme au centre) ---
   const message = h('p', { class: 'greet-msg' });
-  const legend = h('div', { class: 'ring-legend' });
   const minSessions = goals.minSessions || 3;
   const streakOpts = () => ({
     sessionDates: sessionDateList(),
@@ -137,7 +116,7 @@ export default function home(root, dateParam) {
   } });
   const hour = new Date().getHours();
   const hello = `${hour >= 18 || hour < 4 ? 'Bonsoir' : 'Bonjour'}${state.settings.name ? ` ${state.settings.name}` : ''}`;
-  const greet = h('section', { class: 'greet' }, h('div', { class: 'greet-text' }, h('h1', null, hello), message, legend), ringBox);
+  const greet = h('section', { class: 'greet' }, h('div', { class: 'greet-text' }, h('h1', null, hello), message), ringBox);
   refreshers.push(() => {
     const c = dayChecklist(state.days, date, rules.items, rules.custom);
     const n = perfectStreak(state.days, today, streakOpts());
@@ -148,13 +127,10 @@ export default function home(root, dateParam) {
       h('span', { class: `ring-center ${n > 0 ? 'lit' : ''}` }, icon('flame', 15), h('b', null, n)));
     ringBox.classList.toggle('perfect', c.perfect);
     ringBox.setAttribute('aria-label', `Saisies ${c.done} sur ${c.items.length}${hasTraining ? `, ${wk.count} séances sur ${minSessions} cette semaine` : ''}, ${n} jours parfaits d’affilée`);
-    legend.replaceChildren(
-      c.items.length ? h('span', { class: 'lg-data' }, h('i'), `Saisies ${c.done}/${c.items.length}`) : '',
-      hasTraining ? h('span', { class: 'lg-act' }, h('i'), `Séances ${Math.min(wk.count, 99)}/${minSessions} sem.`) : '');
     // Semaine de démarrage : elle n'éteint jamais la flamme, inutile d'alerter.
     const grace = streakOpts().graceUntil;
     const graceWeek = grace && weekStart(date) <= weekStart(grace);
-    message.textContent = greetingMessage(c, isToday, rules.weekly && !graceWeek ? wk : null);
+    message.textContent = greetingMessage(c, isToday, rules.weekly && !graceWeek ? wk : null, { hour: new Date().getHours(), streak: n });
   });
 
   const page = h('main', { class: 'page home-page' }, greet);
@@ -470,10 +446,26 @@ export default function home(root, dateParam) {
         },
       });
       update(v0 ?? null);
+      // Boutons − / + : un toucher = un pas (1 par défaut, réglable dans le widget), sans retaper le chiffre.
+      const step = def.step > 0 ? def.step : 1;
+      const bump = (dir) => {
+        const cur = parseNum(input.value);
+        if (cur == null && dir < 0) return;
+        const raw = Math.max(0, (cur ?? 0) + dir * step);
+        const v = def.decimals || !Number.isInteger(step) ? Math.round(raw * 100) / 100 : Math.round(raw);
+        input.value = String(v).replace('.', ',');
+        update(v);
+        saveCustom(def.id, v);
+        haptic();
+      };
+      const stepLabel = String(step).replace('.', ',');
       const target = def.target != null ? `Objectif : ${def.dir === 'max' ? 'au plus' : 'au moins'} ${String(def.target).replace('.', ',')} ${def.unit || ''}` : isToday ? 'Aujourd’hui' : 'Ce jour-là';
       body = h('div', { class: 'mf', style: { '--c': def.color } },
         h('div', { class: 'mf-label' }, h('span', null, target), pct),
-        h('div', { class: 'with-unit' }, input, h('span', { class: 'unit' }, def.unit || '')),
+        h('div', { class: 'cw-num' },
+          h('button', { class: 'cw-step', 'aria-label': `Retirer ${stepLabel}`, onClick: () => bump(-1) }, icon('minus', 22)),
+          h('div', { class: 'with-unit' }, input, h('span', { class: 'unit' }, def.unit || '')),
+          h('button', { class: 'cw-step plus', 'aria-label': `Ajouter ${stepLabel}`, onClick: () => bump(1) }, icon('plus', 22))),
         def.target != null ? h('div', { class: 'progress' }, bar) : null);
     } else {
       body = h('textarea', { class: 'text-input mood-note', rows: 3, maxlength: 500, placeholder: 'Écris quelques mots…' }, val() || '');

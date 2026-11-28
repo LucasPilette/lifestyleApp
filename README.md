@@ -12,7 +12,8 @@ prénom, code ami, messages, et — si l'utilisateur l'active — humeur du jour
   fonction, objectifs chiffrés facultatifs, critères de la flamme, notifications. Tout se modifie dans le **Profil**.
 - **Amis** : code ami à 6 chiffres, demandes d'ami, discussion, humeur, séances et journées parfaites partagées (si activé).
 - **Discussions** : groupes d'amis (nom au choix, ajout de membres), cartes partagées (flamme, objectif, record,
-  séance terminée avec le détail des exercices, valeurs du jour), émojis et réactions. **Photo de profil** (onboarding ou profil).
+  séance terminée, valeurs du jour, graphique 7 / 30 jours), émojis et réactions. « Voir plus » sur une séance, une séance type
+  ou un programme partagés ouvre le détail, avec import dans ses propres séances. **Photo de profil** (onboarding ou profil).
 - **Notifications** (iOS 16.4+, app installée) : messages, demandes d'ami, ami qui ne va pas fort, journée parfaite d'un ami.
 - **Routines** : habitudes personnelles à cocher chaque jour (peuvent compter pour la flamme).
 - **Widgets personnalisés** (bouton « + » de l'accueil) : liste à cocher, oui / non, émoji, chiffre (unité, objectif) ou texte,
