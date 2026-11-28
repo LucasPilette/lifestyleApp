@@ -13,6 +13,11 @@ prénom, code ami, messages, et — si l'utilisateur l'active — humeur du jour
 - **Amis** : code ami à 6 chiffres, demandes d'ami, discussion, humeur, séances et journées parfaites partagées (si activé).
 - **Notifications** (iOS 16.4+, app installée) : messages, demandes d'ami, ami qui ne va pas fort, journée parfaite d'un ami.
 - **Routines** : habitudes personnelles à cocher chaque jour (peuvent compter pour la flamme).
+- **Widgets personnalisés** (bouton « + » de l'accueil) : liste à cocher, oui / non, émoji, chiffre (unité, objectif) ou texte,
+  avec icône et couleur ; peuvent compter pour la flamme et servir d'objectifs (moyenne, dernière valeur, régularité).
+- **Barre du bas** : Amis, S'entraîner (si l'entraînement est suivi), Objectifs. **Tutoriel** guidé à la première ouverture.
+- **Coach IA** : programme de musculation créé par Claude d'après un questionnaire (séances, objectif, durée, niveau, matériel).
+- **Rappel du soir** (notification) quand la journée n'est pas complète : « ta flamme va s'éteindre ».
 - **Accueil** épuré (verre dépoli, tient sur un écran) : date centrée, « Bonjour Lucas » et un message selon
   la journée, flamme 🔥 des jours parfaits d'affilée. Rubriques repliables (titre coloré + résumé) : sommeil
   (durée, qualité /5), humeur (5 émojis + note), poids (rappel tous les 3 jours), nutrition, pas, entraînement.
@@ -51,6 +56,10 @@ Pense à exporter une sauvegarde de temps en temps (Réglages → Exporter une s
 5. **Notifications** : Edge Functions → *Deploy a new function* → *Via Editor*, nom **`push`**, coller
    `supabase/functions/push/index.ts`, **désactiver la vérification JWT** (la fonction vérifie elle-même l'utilisateur),
    puis *Deploy*. Les clés VAPID sont créées au premier appel et gardées dans la base : aucun secret à configurer.
+   Les rappels du soir sont envoyés par la tâche planifiée `eclipse-rappels` (pg_cron, créée par `schema.sql`).
+6. **Coach IA** : même procédure pour la fonction **`coach`** (`supabase/functions/coach/index.ts`, vérification JWT
+   désactivée), puis Edge Functions → *Secrets* : ajouter **`ANTHROPIC_API_KEY`** (clé créée sur console.anthropic.com).
+   Limite : 5 programmes par utilisateur et par jour.
 
 Les règles de sécurité (RLS) limitent chacun à son profil, ses liens d'amitié et ses messages.
 
@@ -75,7 +84,8 @@ js/components/                            graphiques, éditeur de séries, séle
 js/views/                                 écrans
 js/config.js                              adresse et clé publique du serveur Supabase
 supabase/schema.sql                       tables, règles de sécurité et fonctions du serveur des amis
-supabase/functions/push/index.ts          fonction Edge d'envoi des notifications (Web Push, sans dépendance)
+supabase/functions/push/index.ts          fonction Edge d'envoi des notifications (Web Push, sans dépendance) et rappels du soir
+supabase/functions/coach/index.ts         fonction Edge du coach IA (Claude, SDK Anthropic)
 js/data/seed.js                           exercices et séances initiales
 tools/                                    release, icônes, serveur local
 tests/                                    tests unitaires (node --test)

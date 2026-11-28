@@ -1,12 +1,15 @@
 // Choix de la séance à lancer.
 
 import { h, icon } from '../core/dom.js';
-import { state, activeSession, doneSessions, exerciseName, saveSession, deleteSession, templateColor } from '../core/store.js';
+import { state, activeSession, doneSessions, exerciseName, saveSession, deleteSession, templateColor, saveTemplate } from '../core/store.js';
+import { exampleProgram } from '../core/program.js';
+import { helpOnce } from '../components/tour.js';
+import { uid } from '../core/util.js';
 import { createSession, suggestTemplate } from '../core/training.js';
 import { agoLabel, dateKey } from '../core/date.js';
 import { fmtRange, fmtRest } from '../core/format.js';
 import { back, navigate } from '../core/router.js';
-import { pageHeader, sheet, confirmSheet } from '../core/ui.js';
+import { pageHeader, sheet, confirmSheet, toast, promptSheet } from '../core/ui.js';
 import { unlockAudio, haptic } from '../core/feedback.js';
 
 /** Durée estimée d'une séance type (séries × ~45 s d'effort + repos). */
@@ -41,8 +44,26 @@ export default function trainView(root) {
   }
 
   if (!templates.length) {
-    page.append(h('div', { class: 'empty' }, icon('list'), 'Aucune séance enregistrée.',
-      h('div', { style: { marginTop: '14px' } }, h('button', { class: 'btn primary', onClick: () => navigate('/programs') }, 'Créer une séance'))));
+    // Pas encore de programme : coach IA, séance faite main, ou programme exemple.
+    const option = (cls, ic, title, sub, onClick) => h('button', { class: `card start-option ${cls}`, onClick },
+      h('span', { class: 'cc-icon' }, icon(ic, 22)), h('span', { class: 'cc-txt' }, h('b', null, title), h('span', null, sub)), icon('chevron', 18, 'faint'));
+    page.append(
+      h('div', { class: 'start-head' }, h('h2', null, 'Crée ton programme'), h('p', null, 'Choisis comment démarrer. Tout reste modifiable ensuite.')),
+      option('ai', 'zap', 'Avec le coach IA', 'Quelques questions, et tes séances sont prêtes en une minute.', () => navigate('/coach')),
+      option('', 'edit', 'Moi-même', 'Nomme ta séance et ajoute tes exercices, séries et repos.', createOwn),
+      option('', 'list', 'Programme exemple', 'Haut / bas du corps en 4 séances, pour la salle.', () => {
+        exampleProgram({ startOrder: 0 }).forEach((t) => saveTemplate(t));
+        toast('Programme exemple ajouté');
+        navigate('/train', { replace: true });
+      }));
+  }
+
+  async function createOwn() {
+    const name = await promptSheet({ title: 'Nouvelle séance', placeholder: 'Nom (ex. Haut du corps, Push, Full body)', confirmLabel: 'Créer' });
+    if (name == null) return;
+    const t = { id: uid(), name: name || 'Ma séance', subtitle: '', order: state.templates.length, blocks: [], createdAt: Date.now() };
+    saveTemplate(t);
+    navigate(`/programs/${t.id}`);
   }
 
   for (const t of templates) {
@@ -66,7 +87,8 @@ export default function trainView(root) {
 
   page.append(
     h('button', { class: 'btn dashed block', onClick: () => start(null) }, icon('plus', 18), 'Séance libre'),
-    h('button', { class: 'btn ghost block', onClick: () => navigate('/programs') }, icon('edit', 18), 'Gérer mes séances'),
+    templates.length ? h('button', { class: 'btn ghost block', onClick: () => navigate('/programs') }, icon('edit', 18), 'Gérer mes séances') : '',
+    templates.length ? h('button', { class: 'btn ghost block', onClick: () => navigate('/coach') }, icon('zap', 18), 'Nouveau programme avec le coach IA') : '',
   );
 
   function preview(t) {
@@ -108,4 +130,5 @@ export default function trainView(root) {
   root.append(
     h('div', { class: 'page-bg', 'aria-hidden': 'true', style: { background: [...glow, 'var(--bg)'].join(', ') } }),
     h('div', { class: 'view' }, pageHeader({ title: 'S’entraîner', onBack: () => back('/') }), page));
+  if (templates.length) helpOnce('train', { title: 'Tes séances', iconName: 'dumbbell', text: ['La séance suivante de ton programme est mise en avant. Touche une séance pour voir son contenu, puis lance-la.', 'Tu peux aussi démarrer une séance libre, ou modifier tes séances dans « Gérer mes séances ».'] });
 }

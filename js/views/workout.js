@@ -9,6 +9,7 @@ import { actionSheet, confirmSheet, promptSheet, toast } from '../core/ui.js';
 import { keepAwake, restDoneSound, countdownBeep, successSound, haptic, unlockAudio } from '../core/feedback.js';
 import { debounce } from '../core/util.js';
 import { createSessionEditor } from '../components/session-editor.js';
+import { helpOnce } from '../components/tour.js';
 import { sessionBenchLift } from '../core/goals.js';
 import { fmtKg as fmtKg2 } from '../core/format.js';
 
@@ -260,6 +261,7 @@ export default function workoutView(root) {
   const timer = setInterval(tick, 250);
   keepAwake(true);
   unlockAudio();
+  helpOnce('workout', { title: 'Pendant la séance', iconName: 'timer', text: ['Saisis la charge et les répétitions, puis valide la série avec ✓ : le minuteur de repos démarre tout seul.', 'Glisse une série vers la gauche pour la supprimer, touche son numéro pour ses options, et ⋯ pour changer d’exercice ou régler le repos.'] });
 
   const onVis = () => {
     if (document.visibilityState === 'hidden') save.pending();

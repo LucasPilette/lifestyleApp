@@ -5,7 +5,7 @@ import { isConfigured, rpc, rest, invoke, accessToken, userId } from './supabase
 import { state, doneSessions, updateSettings } from './store.js';
 import { todayKey, dateKey } from './date.js';
 import { debounce } from './util.js';
-import { flameChecker, perfectStreak } from './metrics.js';
+import { flameChecker, perfectStreak, dayChecklist, weekTraining } from './metrics.js';
 import { flameRules } from './prefs.js';
 
 export { isConfigured };
@@ -35,7 +35,19 @@ export const syncName = debounce(() => {
 
 export async function listFriends() {
   await ensureProfile();
-  return (await rpc('my_friends')) || [];
+  const list = (await rpc('my_friends')) || [];
+  inboxCache = { at: Date.now(), n: countInbox(list) };
+  return list;
+}
+
+// Messages non lus + demandes reçues (pastille du menu et de la barre du bas), gardé 30 s.
+let inboxCache = { at: 0, n: 0 };
+const countInbox = (list) => list.reduce((n, f) => n + (f.unread || 0) + (f.status === 'pending' && f.direction === 'in' ? 1 : 0), 0);
+export async function inboxCount() {
+  if (!isConfigured() || !state.settings.friendCode) return 0;
+  if (Date.now() - inboxCache.at < 30000) return inboxCache.n;
+  await listFriends();
+  return inboxCache.n;
 }
 
 /**
@@ -80,18 +92,26 @@ export const myId = userId;
 let lastPushed = null;
 const notified = new Set(); // événements déjà signalés pendant cette session (le serveur dédoublonne aussi)
 
-/** Journée parfaite aujourd'hui (selon les critères de flamme de l'utilisateur) et série en cours. */
-function perfectToday(today) {
+/**
+ * Flamme du jour : journée parfaite ou non, série en cours, et ce qu'il reste à faire (pour le rappel du soir).
+ * null si l'utilisateur n'a aucun critère quotidien.
+ */
+function flameToday(today) {
   const rules = flameRules(state.settings);
   if (!rules.items.length) return null;
+  const sessionDates = doneSessions().map((x) => dateKey(new Date(x.startedAt)));
+  const minSessions = state.settings.goals.minSessions || 3;
   const opts = {
-    sessionDates: doneSessions().map((x) => dateKey(new Date(x.startedAt))),
-    minSessions: state.settings.goals.minSessions || 3,
+    sessionDates, minSessions,
     graceUntil: state.meta.createdAt ? dateKey(new Date(state.meta.createdAt)) : null,
-    items: rules.items,
-    weekly: rules.weekly,
+    items: rules.items, weekly: rules.weekly, custom: rules.custom,
   };
-  return flameChecker(state.days, today, opts)(today) ? perfectStreak(state.days, today, opts) : null;
+  const todo = dayChecklist(state.days, today, rules.items, rules.custom).missing;
+  if (rules.weekly) {
+    const wk = weekTraining(sessionDates, today, minSessions);
+    if (wk.needed > 0 && wk.needed >= wk.daysLeft) todo.push(`${wk.needed} séance${wk.needed > 1 ? 's' : ''} d’ici dimanche`);
+  }
+  return { perfect: flameChecker(state.days, today, opts)(today), streak: perfectStreak(state.days, today, opts), todo };
 }
 
 function statusPayload() {
@@ -99,14 +119,29 @@ function statusPayload() {
   const today = todayKey();
   const mood = share ? state.days.get(today)?.mood ?? null : null;
   const last = share ? doneSessions()[0] : null;
-  const streak = share ? perfectToday(today) : null;
+  const flame = flameToday(today);
+  const n = state.settings.notifications || {};
+  let tz = null;
+  try {
+    tz = Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+  } catch {
+    tz = null;
+  }
   return {
     share,
     mood,
     mood_date: mood != null ? today : null,
     last_workout_at: last ? new Date(last.endedAt || last.startedAt).toISOString() : null,
-    perfect_date: streak ? today : null,
-    streak: streak || null,
+    // Journée parfaite et série : visibles par les amis seulement si share (voir my_friends).
+    perfect_date: flame?.perfect ? today : null,
+    streak: flame?.perfect ? flame.streak : null,
+    // Rappel du soir (privé) : heure choisie, fuseau, flamme en jeu et ce qu'il reste à faire.
+    tz,
+    remind_hour: n.enabled && flame && n.reminderHour != null ? n.reminderHour : null,
+    flame: flame ? flame.streak : null,
+    flame_date: flame ? today : null,
+    todo: flame ? flame.todo.join(', ').slice(0, 200) || null : null,
+    todo_date: flame ? today : null,
   };
 }
 

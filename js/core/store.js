@@ -9,7 +9,7 @@ import { dateKey, parseKey, todayKey } from './date.js';
 import { DEFAULT_OBJECTIVES, DEFAULT_GOAL_LIST, bestBenchLift } from './goals.js';
 import { DEFAULT_WIDGETS, DEFAULT_FLAME } from './prefs.js';
 
-export const DAY_FIELDS = ['sleepMin', 'sleepQ', 'kcal', 'prot', 'steps', 'weight', 'mood', 'moodNote', 'habits', 'habitsTotal'];
+export const DAY_FIELDS = ['sleepMin', 'sleepQ', 'kcal', 'prot', 'steps', 'weight', 'mood', 'moodNote', 'habits', 'habitsTotal', 'custom'];
 
 export const DEFAULT_SETTINGS = {
   name: '', // prénom affiché dans le message d'accueil
@@ -19,7 +19,8 @@ export const DEFAULT_SETTINGS = {
   widgets: DEFAULT_WIDGETS, // rubriques de l'accueil, dans l'ordre
   flame: DEFAULT_FLAME, // rubriques exigées pour la flamme ('training' = minimum de séances par semaine)
   habits: [], // routines : [{ id, name }]
-  notifications: { enabled: false }, // l'utilisateur accepte d'en recevoir (permission demandée à part)
+  customWidgets: [], // widgets créés par l'utilisateur (voir core/prefs.js)
+  notifications: { enabled: false, reminderHour: 21 }, // accepte d'en recevoir ; rappel du soir (null = aucun)
   shareActivity: false, // partager humeur du jour et dernière séance avec ses amis
   friendCode: null, // code ami (6 chiffres), attribué par le serveur
   objectives: DEFAULT_OBJECTIVES, // objectifs à long terme (voir core/goals.js)
@@ -93,10 +94,8 @@ async function applySeed() {
   const missing = SEED_EXERCISES.filter((e) => !state.exercises.has(e.id));
   missing.forEach((e) => state.exercises.set(e.id, { ...e }));
   if (missing.length) await db.putMany('exercises', missing);
-  if (v === 0 && state.templates.length === 0) {
-    state.templates = seedTemplates();
-    await db.putMany('templates', state.templates);
-  }
+  // Nouvelle installation : plus de séances préremplies (programme créé avec le coach IA, à la main ou depuis
+  // le programme exemple, voir core/program.js). Les séances d'origine restent pour l'installation existante.
   // v2 : une seule série d'échauffement, sur le premier exercice de chaque séance.
   if (v >= 1 && v < 2 && state.templates.length) {
     state.templates.forEach(normalizeWarmups);
@@ -150,7 +149,12 @@ export function updateSettings(patch) {
 
 /** Onboarding terminé (ou passé). */
 export async function markOnboarded() {
-  state.meta = { ...state.meta, onboarded: Date.now(), legacyUser: false };
+  await updateMeta({ onboarded: Date.now(), legacyUser: false });
+}
+
+/** Indicateurs internes (tutoriel vu, aides affichées…). */
+export async function updateMeta(patch) {
+  state.meta = { ...state.meta, ...patch };
   await persist(db.kvSet('meta', state.meta));
 }
 
@@ -161,6 +165,14 @@ export const getDay = (date) => state.days.get(date) || null;
 
 export function setDayField(date, field, value) {
   setDayFields(date, { [field]: value });
+}
+
+/** Valeur du jour d'un widget personnalisé (null = effacer). */
+export function setDayCustom(date, widgetId, value) {
+  const cur = { ...(state.days.get(date)?.custom || {}) };
+  if (value == null || value === '' || (typeof value === 'number' && Number.isNaN(value))) delete cur[widgetId];
+  else cur[widgetId] = value;
+  setDayFields(date, { custom: Object.keys(cur).length ? cur : null });
 }
 
 /** Modifie plusieurs champs d'une journée en une écriture (null = effacer). */

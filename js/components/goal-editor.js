@@ -28,11 +28,12 @@ export function removeGoal(key) {
  * @returns {Promise<boolean>} true si enregistré ou supprimé
  */
 export function editGoal(key, { current = null, raise = false, isNew = false } = {}) {
-  const def = goalDef(key, state.exercises);
+  const custom = state.settings.customWidgets || [];
+  const def = goalDef(key, state.exercises, custom);
   const cfg = state.settings.objectives?.[key] || {};
   return new Promise((resolve) => {
     let done = false;
-    let dir = cfg.dir || suggestDir(key, cfg.target, current);
+    let dir = cfg.dir || suggestDir(key, cfg.target, current, custom);
     let target = cfg.target ?? null;
     if (raise && target != null) {
       const d = (cfg.dir || 'min') === 'max' ? -def.step : def.step;
@@ -57,7 +58,8 @@ export function editGoal(key, { current = null, raise = false, isNew = false } =
         const input = numInput({ value: str(target), placeholder: current != null ? str(Math.round(current * 10) / 10) : '', decimal: !!def.decimal, label: 'Objectif' });
         readTarget = () => parseNum(input.value);
         const label = def.kind === 'lift' ? (def.lest ? 'Lest visé (1 rep)' : '1RM visé')
-          : def.kind === 'avg' ? 'Moyenne visée sur 30 jours'
+          : def.kind === 'avg' || def.kind === 'cavg' ? 'Moyenne visée sur 30 jours'
+          : def.kind === 'rate' ? 'Nombre de jours visé sur 30'
           : def.kind === 'sessions' ? 'Séances par semaine visées' : 'Valeur visée';
         parts.push(h('div', { class: 'field-label' }, label), h('div', { class: 'with-unit' }, input, h('span', { class: 'unit' }, def.unit)));
       }

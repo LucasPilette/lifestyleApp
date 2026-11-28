@@ -5,7 +5,7 @@ import { state } from '../core/store.js';
 import { navigate } from '../core/router.js';
 import { drawer } from '../core/ui.js';
 import { formatFriendCode } from '../core/prefs.js';
-import { isConfigured, listFriends } from '../core/social.js';
+import { inboxCount } from '../core/social.js';
 import { VERSION } from '../version.js';
 
 const ITEMS = [
@@ -19,15 +19,11 @@ const ITEMS = [
 export function openSideMenu() {
   const badge = h('span', { class: 'badge hidden' });
   // Demandes reçues + messages non lus (sans bloquer l'ouverture du menu)
-  if (isConfigured() && state.settings.friendCode) {
-    listFriends().then((list) => {
-      const n = list.reduce((s, f) => s + (f.unread || 0) + (f.status === 'pending' && f.direction === 'in' ? 1 : 0), 0);
-      if (n) {
-        badge.textContent = n > 99 ? '99+' : String(n);
-        badge.classList.remove('hidden');
-      }
-    }).catch(() => {});
-  }
+  inboxCount().then((n) => {
+    if (!n) return;
+    badge.textContent = n > 99 ? '99+' : String(n);
+    badge.classList.remove('hidden');
+  }).catch(() => {});
   const name = state.settings.name || 'Mon profil';
   drawer((close) => [
     h('div', { class: 'drawer-head' },

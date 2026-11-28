@@ -423,9 +423,9 @@ test('préférences : widgets selon les objectifs, flamme effective', async () =
   assert.deepEqual(p.cleanWidgets(['mood', 'nope', 'mood', 'sleep']), ['mood', 'sleep']);
   assert.deepEqual(p.defaultFlameFor(['sleep', 'weight', 'steps', 'training', 'routines']), ['sleep', 'training', 'routines']);
   // Réglages historiques : sommeil + nutrition + humeur, et le minimum de séances
-  assert.deepEqual(p.flameRules({}), { items: ['sleep', 'nutrition', 'mood'], weekly: true });
+  assert.deepEqual(p.flameRules({}), { items: ['sleep', 'nutrition', 'mood'], weekly: true, custom: {} });
   // Un widget retiré de l'accueil ne compte plus pour la flamme
-  assert.deepEqual(p.flameRules({ widgets: ['sleep', 'routines'], flame: ['sleep', 'training', 'routines'] }), { items: ['sleep', 'routines'], weekly: false });
+  assert.deepEqual(p.flameRules({ widgets: ['sleep', 'routines'], flame: ['sleep', 'training', 'routines'] }), { items: ['sleep', 'routines'], weekly: false, custom: {} });
 });
 
 test('routines : cocher, total mémorisé par jour, liste modifiée', async () => {
@@ -478,4 +478,109 @@ test('code ami : saisie et affichage', async () => {
   assert.equal(p.parseFriendCode('12345'), null);
   assert.equal(p.parseFriendCode(' 012-345 '), '012345');
   assert.equal(p.formatFriendCode('012345'), '012 345');
+});
+
+// --- Coach IA : conversion du programme généré ---
+test('programme IA : validation, nouveaux exercices, bornes, échauffement unique', async () => {
+  const { programToTemplates, exampleProgram } = await import('../js/core/program.js');
+  const raw = {
+    name: 'Full body 3 jours', summary: 'Progression en double fourchette.',
+    new_exercises: [
+      { id: 'new_1', name: 'Pompes', muscle: 'Pectoraux', load: 'pdc' },
+      { id: 'new_2', name: 'squat', muscle: 'Quadriceps', load: 'kg' }, // existe déjà (Squat) : rapproché
+      { id: 'new_3', name: 'Jamais utilisé', muscle: 'Bras', load: 'kg' },
+    ],
+    sessions: [
+      {
+        name: 'Full body A', subtitle: 'Bases',
+        blocks: [
+          { rest_seconds: 9999, items: [{ exercise_id: 'new_2', warmup: true, note: '', sets: [{ count: 20, reps_min: 5, reps_max: 3, label: 'Lourd' }] }] },
+          { rest_seconds: 90, items: [
+            { exercise_id: 'bench', warmup: true, note: 'RIR 2', sets: [{ count: 3, reps_min: 8, reps_max: 12, label: '' }] },
+            { exercise_id: 'new_1', warmup: false, note: '', sets: [] },
+          ] },
+          { rest_seconds: 60, items: [{ exercise_id: 'inconnu', warmup: false, note: '', sets: [] }] },
+        ],
+      },
+      { name: '', subtitle: '', blocks: [{ rest_seconds: 60, items: [{ exercise_id: 'nope', warmup: false, note: '', sets: [] }] }] },
+    ],
+  };
+  const r = programToTemplates(raw, exercises, { startOrder: 2 });
+  assert.equal(r.templates.length, 1); // la 2e séance n'a aucun exercice valide
+  const t = r.templates[0];
+  assert.equal(t.order, 2);
+  assert.equal(t.blocks.length, 2);
+  assert.equal(t.blocks[0].rest, 600); // borné
+  assert.equal(t.blocks[0].items[0].exerciseId, 'squat'); // rapproché de l'existant
+  assert.deepEqual(t.blocks[0].items[0].sets[0], { n: 8, min: 5, max: 5, tag: 'Lourd' });
+  assert.equal(t.blocks[1].items[0].warmup, false); // un seul échauffement par séance
+  assert.equal(t.blocks[1].items.length, 2); // superset
+  assert.deepEqual(t.blocks[1].items[1].sets, [{ n: 3, min: 8, max: 12, tag: '' }]); // séries par défaut
+  assert.deepEqual(r.newExercises.map((e) => [e.id, e.load]), [['pompes', 'pdc']]); // créé seulement s'il sert
+  assert.deepEqual(r.skipped, ['inconnu', 'nope']);
+  // programme exemple : 4 séances aux noms génériques, nouveaux identifiants
+  const ex = exampleProgram({ startOrder: 0 });
+  assert.deepEqual(ex.map((x) => x.name), ['Haut du corps A', 'Bas du corps A', 'Haut du corps B', 'Bas du corps B']);
+  assert.ok(ex.every((x) => !['upper-a', 'lower-a', 'upper-b', 'lower-b'].includes(x.id)));
+});
+
+test('widgets personnalisés : fait ou pas, flamme, liste à cocher, résumé', async () => {
+  const p = await import('../js/core/prefs.js');
+  const water = { id: 'cw_eau', kind: 'number', name: 'Eau', unit: 'verres' };
+  const morning = { id: 'cw_matin', kind: 'checklist', name: 'Matin', items: [{ id: 'a', name: 'Lit' }, { id: 'b', name: 'Eau' }] };
+  const energy = { id: 'cw_energie', kind: 'emoji', name: 'Énergie', emojis: ['🪫', '😴', '😐', '💪', '⚡'] };
+  const med = { id: 'cw_med', kind: 'check', name: 'Méditer' };
+  const journal = { id: 'cw_txt', kind: 'text', name: 'Journal' };
+  assert.equal(p.customDone(water, 0), true); // 0 verre renseigné = renseigné
+  assert.equal(p.customDone(water, null), false);
+  assert.equal(p.customDone(energy, 4), true);
+  assert.equal(p.customDone(med, true), true);
+  assert.equal(p.customDone(journal, '  '), false);
+  let v = p.toggleCustomItem(null, 'a', morning.items);
+  assert.deepEqual(v, { done: ['a'], total: 2 });
+  assert.equal(p.customDone(morning, v), false);
+  v = p.toggleCustomItem(v, 'b', morning.items);
+  assert.equal(p.customDone(morning, v), true);
+  assert.equal(p.toggleCustomItem({ done: ['a'], total: 2 }, 'a', morning.items), null);
+  assert.equal(p.customSummary(water, 6.5), '6,5 verres');
+  assert.equal(p.customSummary(energy, 5), '⚡');
+  assert.equal(p.customSummary(morning, { done: ['a'], total: 2 }), '1/2');
+  // Widgets connus, flamme effective, journée parfaite
+  const settings = { widgets: ['mood', 'cw_eau', 'cw_inconnu'], flame: ['mood', 'cw_eau'], customWidgets: [water] };
+  assert.deepEqual(p.cleanWidgets(settings.widgets, settings.customWidgets), ['mood', 'cw_eau']);
+  const rules = p.flameRules(settings);
+  assert.deepEqual(rules.items, ['mood', 'cw_eau']);
+  const days = new Map([['2026-11-27', { mood: 4, custom: { cw_eau: 8 } }], ['2026-11-26', { mood: 4 }]]);
+  assert.equal(dayChecklist(days, '2026-11-27', rules.items, rules.custom).perfect, true);
+  assert.deepEqual(dayChecklist(days, '2026-11-26', rules.items, rules.custom).missing, ['eau']);
+  assert.equal(p.allWidgets([water]).cw_eau.label, 'Eau');
+});
+
+test('objectifs sur widgets : moyenne, dernière valeur, régularité, propositions', async () => {
+  const g = await import('../js/core/goals.js');
+  const water = { id: 'cw_eau', kind: 'number', name: 'Eau', unit: 'verres' };
+  const energy = { id: 'cw_nrj', kind: 'emoji', name: 'Énergie', emojis: ['🪫', '😴', '😐', '💪', '⚡'] };
+  const med = { id: 'cw_med', kind: 'check', name: 'Méditer' };
+  const custom = [water, energy, med];
+  const today = '2026-11-27';
+  const days = new Map([
+    ['2026-11-27', { mood: 4, custom: { cw_eau: 8, cw_nrj: 4, cw_med: true } }],
+    ['2026-11-26', { mood: 3, custom: { cw_eau: 6, cw_nrj: 5 } }],
+    ['2026-10-01', { custom: { cw_eau: 1 } }], // hors 30 j
+  ]);
+  const ctx = { days, sessions: [], today, custom };
+  assert.equal(g.currentValue('cavg:cw_eau', {}, ctx).value, 7);
+  assert.equal(g.currentValue('clast:cw_eau', {}, ctx).value, 8);
+  assert.equal(g.currentValue('cavg:cw_nrj', {}, ctx).value, 4.5);
+  assert.equal(g.currentValue('rate:cw_med', {}, ctx).value, 1);
+  assert.equal(g.currentValue('rate:mood', {}, ctx).value, 2);
+  assert.equal(g.goalDef('cavg:cw_eau', new Map(), custom).fmt(7.25), '7,3 verres');
+  assert.equal(g.goalDef('rate:cw_med', new Map(), custom).label, 'Régularité · Méditer');
+  assert.equal(g.goalDef('cavg:supprime', new Map(), custom).kind, 'unknown');
+  assert.equal(g.evaluateGoal('cavg:cw_eau', { target: 8, dir: 'min' }, ctx).status, 'progress');
+  assert.equal(g.evaluateGoal('rate:mood', { target: 2, dir: 'min' }, ctx).status, 'met');
+  // propositions limitées aux widgets affichés
+  const keys = g.addableGoals(['mood', 'cw_eau', 'cw_med'], custom).map((x) => x.key);
+  assert.deepEqual(keys, ['avg:mood', 'rate:mood', 'cavg:cw_eau', 'clast:cw_eau', 'rate:cw_eau', 'rate:cw_med']);
+  assert.ok(!g.addableGoals(['mood'], custom).some((x) => x.key.includes('cw_')));
 });

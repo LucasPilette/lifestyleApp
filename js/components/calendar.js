@@ -24,12 +24,16 @@ const WEEKDAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
  * @param {string} o.selected jour affiché
  * @param {string} o.today
  * @param {string[]} [o.widgets] widgets affichés à l'accueil (pastilles et légende limitées à ceux-ci)
+ * @param {object[]} [o.customs] widgets personnalisés (une pastille chacun, à leur couleur)
  * @param {(key: string) => boolean} o.isFlame
  * @param {Map<string, {count: number, color: string|null}>} o.sessionDays séances terminées par jour
  * @param {(key: string) => void} o.onPick
  */
-export function openCalendar({ selected, today, widgets, isFlame, sessionDays, onPick }) {
-  const dotsShown = DOTS.filter((d) => !widgets || widgets.includes(d.id));
+export function openCalendar({ selected, today, widgets, customs = [], isFlame, sessionDays, onPick }) {
+  const dotsShown = [
+    ...DOTS.filter((d) => !widgets || widgets.includes(d.id)),
+    ...customs.filter((c) => !widgets || widgets.includes(c.id)).map((c) => ({ id: c.id, label: c.name, c: c.color, custom: true })),
+  ];
   let month = monthStart(selected);
   const currentMonth = monthStart(today);
   const title = h('div', { class: 'cal-title' });
@@ -61,7 +65,8 @@ export function openCalendar({ selected, today, widgets, isFlame, sessionDays, o
       const future = k > today;
       if (lit) flames++;
       if (trained && dotsShown.some((d) => d.id === 'training')) sessions += trained.count;
-      const dots = dotsShown.filter((d) => (d.id === 'training' ? trained : entries[d.id]));
+      const day = state.days.get(k);
+      const dots = dotsShown.filter((d) => (d.id === 'training' ? trained : d.custom ? day?.custom?.[d.id] != null : entries[d.id]));
       const n = parseKey(k).getDate();
       cells.push(h('button', {
         class: `cal-day ${lit ? 'lit' : ''} ${k === today ? 'today' : ''} ${k === selected ? 'sel' : ''} ${future ? 'future' : ''}`,

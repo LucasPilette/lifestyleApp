@@ -7,9 +7,13 @@
 //   'bench'             1RM réel au développé couché (barre passée), avec valeur de départ enregistrée
 //   'lift:<exercice>'   1RM réel (barre la plus lourde passée) sur un autre exercice
 //   'sessions'          séances par semaine (moyenne sur 4 semaines)
+//   'cavg:<widget>'     moyenne 30 j d'un widget personnalisé (chiffre ou émoji)
+//   'clast:<widget>'    dernière valeur d'un widget personnalisé (chiffre)
+//   'rate:<widget>'     régularité : jours « faits » sur les 30 derniers (widget intégré ou personnalisé)
 
 import { addDays, dateKey } from './date.js';
-import { avgBetween } from './metrics.js';
+import { avgBetween, dayChecklist } from './metrics.js';
+import { WIDGETS, customDone } from './prefs.js';
 import { exerciseHistory, e1rm } from './training.js';
 import { fmtNum, fmtSleep, fmtKg } from './format.js';
 
@@ -69,8 +73,31 @@ export function liftExercise(key) {
   return null;
 }
 
-/** Définition d'affichage d'un objectif. `exercises` sert à nommer les objectifs de force. */
-export function goalDef(key, exercises = new Map()) {
+/** Définition d'affichage d'un objectif. `exercises` nomme les objectifs de force, `custom` (widgets personnalisés) les autres. */
+export function goalDef(key, exercises = new Map(), custom = []) {
+  const [prefix, ref] = key.includes(':') ? [key.slice(0, key.indexOf(':')), key.slice(key.indexOf(':') + 1)] : [key, null];
+  if (prefix === 'cavg' || prefix === 'clast') {
+    const w = custom.find((c) => c.id === ref);
+    if (!w) return unknownDef(key);
+    const emoji = w.kind === 'emoji';
+    const unit = emoji ? '/5' : w.unit || '';
+    const num = (v) => fmtNum(v, emoji || w.decimals || prefix === 'cavg' ? 1 : 0);
+    return {
+      kind: prefix, widget: w, label: prefix === 'cavg' ? `${w.name} (moyenne)` : w.name, short: w.name, icon: 'chart', color: w.color || 'var(--c-routine)',
+      unit, decimal: true, dirs: emoji ? ['min'] : ['min', 'max'], step: 1,
+      fmt: (v) => (emoji ? `${w.emojis?.[Math.min(4, Math.max(0, Math.round(v) - 1))] || ''} ${num(v)}/5` : `${num(v)}${unit ? ` ${unit}` : ''}`),
+      compact: (v) => num(v),
+    };
+  }
+  if (prefix === 'rate') {
+    const w = WIDGETS[ref] ? { name: WIDGETS[ref].label, color: WIDGETS[ref].color } : custom.find((c) => c.id === ref);
+    if (!w || ref === 'training') return unknownDef(key);
+    return {
+      kind: 'rate', widgetId: ref, label: `Régularité · ${w.name}`, short: w.name, icon: 'calendar', color: w.color || 'var(--c-routine)',
+      unit: 'j / 30', decimal: false, dirs: ['min'], step: 1,
+      fmt: (v) => `${Math.round(v)} j / 30`, compact: (v) => `${Math.round(v)} j`,
+    };
+  }
   if (key === 'weight') {
     return {
       kind: 'weight', label: 'Poids', short: 'Poids', icon: 'scale', color: 'var(--c-weight)', unit: 'kg', decimal: true,
@@ -96,7 +123,32 @@ export function goalDef(key, exercises = new Map()) {
       fmt: (v) => (lest ? `+${kg(v)}` : kg(v)), compact: (v) => fmtNum(Math.round(v * 2) / 2, 1),
     };
   }
-  return { kind: 'unknown', label: key, short: key, icon: 'flag', color: 'var(--text-3)', unit: '', dirs: ['min'], step: 1, fmt: (v) => fmtNum(v, 1), compact: (v) => fmtNum(v, 1) };
+  return unknownDef(key);
+}
+
+const unknownDef = (key) => ({ kind: 'unknown', label: key, short: key, icon: 'flag', color: 'var(--text-3)', unit: '', dirs: ['min'], step: 1, fmt: (v) => fmtNum(v, 1), compact: (v) => fmtNum(v, 1) });
+
+/**
+ * Objectifs proposés à l'ajout, d'après les widgets affichés (la force se choisit via la liste d'exercices).
+ * @returns {{ key: string, group: string }[]}
+ */
+export function addableGoals(widgets = [], customWidgets = []) {
+  const has = (w) => widgets.includes(w);
+  const out = [];
+  if (has('weight')) out.push({ key: 'weight', group: 'Corps' });
+  if (has('sleep')) out.push({ key: 'sleep', group: 'Sommeil' }, { key: 'avg:sleepQ', group: 'Sommeil' });
+  if (has('nutrition')) out.push({ key: 'kcal', group: 'Nutrition' }, { key: 'avg:prot', group: 'Nutrition' });
+  if (has('steps')) out.push({ key: 'avg:steps', group: 'Activité' });
+  if (has('training')) out.push({ key: 'sessions', group: 'Entraînement' });
+  if (has('mood')) out.push({ key: 'avg:mood', group: 'Bien-être' });
+  for (const w of ['sleep', 'mood', 'nutrition', 'steps', 'routines']) if (has(w)) out.push({ key: `rate:${w}`, group: 'Régularité' });
+  for (const c of customWidgets) {
+    if (!has(c.id)) continue;
+    if (c.kind === 'number') out.push({ key: `cavg:${c.id}`, group: c.name }, { key: `clast:${c.id}`, group: c.name });
+    if (c.kind === 'emoji') out.push({ key: `cavg:${c.id}`, group: c.name });
+    out.push({ key: `rate:${c.id}`, group: c.name });
+  }
+  return out;
 }
 
 /** Objectifs proposés à l'ajout (hors force, choisie via la liste d'exercices). */
@@ -159,8 +211,32 @@ function latest(days, field) {
 }
 
 /** Valeur actuelle d'un objectif + précision (période, nombre de jours…). */
-export function currentValue(key, cfg, { days, sessions, exercises = new Map(), today }) {
-  const def = goalDef(key, exercises);
+export function currentValue(key, cfg, { days, sessions, exercises = new Map(), today, custom = [] }) {
+  const def = goalDef(key, exercises, custom);
+  if (def.kind === 'cavg' || def.kind === 'clast') {
+    const id = def.widget.id;
+    if (def.kind === 'clast') {
+      let best = null;
+      for (const [k, d] of days) if (typeof d.custom?.[id] === 'number' && (!best || k > best.key)) best = { key: k, value: d.custom[id] };
+      return best ? { value: best.value, sub: 'dernière valeur', since: best.key } : { value: null, sub: 'pas encore de valeur' };
+    }
+    const from = addDays(today, -29);
+    const vals = [];
+    for (const [k, d] of days) if (k >= from && k <= today && typeof d.custom?.[id] === 'number') vals.push(d.custom[id]);
+    return vals.length
+      ? { value: vals.reduce((a, b) => a + b, 0) / vals.length, sub: `moyenne 30 j · ${vals.length} j saisis` }
+      : { value: null, sub: 'pas encore de données' };
+  }
+  if (def.kind === 'rate') {
+    const w = custom.find((c) => c.id === def.widgetId);
+    let n = 0;
+    for (let i = 0; i < 30; i++) {
+      const k = addDays(today, -i);
+      const ok = w ? customDone(w, days.get(k)?.custom?.[w.id]) : dayChecklist(days, k, [def.widgetId]).perfect;
+      if (ok) n++;
+    }
+    return { value: n, sub: 'sur les 30 derniers jours' };
+  }
   if (def.kind === 'weight') {
     const l = latest(days, 'weight');
     return l ? { value: l.value, sub: 'dernière pesée', since: l.key } : { value: null, sub: 'aucune pesée' };
@@ -205,7 +281,7 @@ export function progressOf(value, target, start, dir) {
  * status : 'unset' | 'progress' | 'met' (atteint, à maintenir) | 'lost' (atteint puis perdu)
  */
 export function evaluateGoal(key, cfg, ctx) {
-  const def = goalDef(key, ctx.exercises);
+  const def = goalDef(key, ctx.exercises, ctx.custom);
   const cur = currentValue(key, cfg, ctx);
   const base = { id: key, key, def, cfg: cfg || {}, ...cur };
   if (!cfg || cfg.target == null) return { ...base, status: 'unset', progress: 0 };
@@ -218,8 +294,8 @@ export function evaluateGoal(key, cfg, ctx) {
 }
 
 /** Direction suggérée quand on fixe une cible (poids : prise ou perte selon la valeur actuelle). */
-export function suggestDir(key, target, current) {
-  const def = goalDef(key);
+export function suggestDir(key, target, current, custom = []) {
+  const def = goalDef(key, new Map(), custom);
   if (def.dirs.length === 1) return def.dirs[0];
   if (current == null || target == null) return 'min';
   return target >= current ? 'min' : 'max';

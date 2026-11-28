@@ -9,6 +9,7 @@ import { dateKey, todayKey, agoLabel, formatShort, formatTime } from '../core/da
 import { parseFriendCode } from '../core/prefs.js';
 import { haptic } from '../core/feedback.js';
 import { friendCodeCard } from './profile.js';
+import { helpOnce } from '../components/tour.js';
 import * as social from '../core/social.js';
 
 const friendCache = new Map(); // id -> ami (pour afficher le nom tout de suite dans la discussion)
@@ -158,6 +159,7 @@ export function friendsView(root) {
   root.append(h('div', { class: 'view' },
     pageHeader({ title: 'Amis', onBack: () => back('/'), actions: [h('button', { class: 'icon-btn', 'aria-label': 'Actualiser', onClick: load }, icon('refresh', 20))] }),
     page));
+  helpOnce('friends', { title: 'Tes amis', iconName: 'users', text: ['Partage ton code à 6 chiffres, ou entre celui d’un ami : il reçoit une demande à accepter.', 'Ensuite, discutez ici. Si vous l’activez dans votre profil, vous voyez aussi l’humeur, les séances et les journées parfaites de l’autre, et vous êtes prévenus.'] });
   return () => document.removeEventListener('visibilitychange', onVis);
 }
 

@@ -1,10 +1,10 @@
 // Profil : prénom, code ami, thème, widgets de l'accueil, flamme, routines, partage et notifications.
 
 import { h, icon } from '../core/dom.js';
-import { state, updateSettings, setDayFields } from '../core/store.js';
+import { state, updateSettings, setDayFields, updateMeta } from '../core/store.js';
 import { back, navigate } from '../core/router.js';
-import { pageHeader, stepper, toggle, toast } from '../core/ui.js';
-import { WIDGETS, cleanWidgets, formatFriendCode, reconcileHabits } from '../core/prefs.js';
+import { pageHeader, stepper, toggle, toast, segmented } from '../core/ui.js';
+import { allWidgets, cleanWidgets, formatFriendCode, reconcileHabits } from '../core/prefs.js';
 import { applyTheme } from '../core/theme.js';
 import { todayKey } from '../core/date.js';
 import { themePicker, widgetPicker, flameToggle, habitsEditor, notificationToggle } from '../components/prefs-ui.js';
@@ -69,11 +69,13 @@ export default function profileView(root) {
   // Flamme : un interrupteur par widget affiché
   const flameBox = h('div', { class: 'list flame-list' });
   const renderFlame = () => {
-    const widgets = cleanWidgets(state.settings.widgets);
+    const customs = state.settings.customWidgets || [];
+    const defs = allWidgets(customs);
+    const widgets = cleanWidgets(state.settings.widgets, customs);
     flameBox.replaceChildren(...widgets.map((id) => {
-      const w = WIDGETS[id];
+      const w = defs[id];
       return h('div', { class: 'row', style: { '--c': w.color } },
-        h('span', { class: 'card-icon' }, icon(w.icon, 17)),
+        h('span', { class: 'card-icon' }, w.emoji ? h('span', { class: 'rb-emoji' }, w.emoji) : icon(w.icon, 17)),
         h('div', { class: 'row-main' }, h('div', { class: 'row-title' }, w.label),
           id === 'training'
             ? h('div', { class: 'fl-sessions' }, h('span', { class: 'row-sub' }, 'Séances / semaine'),
@@ -99,7 +101,12 @@ export default function profileView(root) {
     friendCodeCard(),
     ...section('Apparence', themePicker({ theme: st.theme, mode: st.mode, onChange: (t) => { updateSettings(t); applyTheme(t); } })),
     ...section('Widgets de l’accueil',
-      widgetPicker({ value: cleanWidgets(st.widgets), reorder: true, onChange: (v) => { updateSettings({ widgets: v }); renderFlame(); } })),
+      widgetPicker({
+        value: cleanWidgets(st.widgets, st.customWidgets), reorder: true, defs: allWidgets(st.customWidgets),
+        onChange: (v) => { updateSettings({ widgets: v }); renderFlame(); },
+        onEdit: (id) => navigate(`/widgets/${id}`),
+      }),
+      h('button', { class: 'btn dashed block', onClick: () => navigate('/widgets/new') }, icon('plus', 18), 'Créer un widget')),
     ...section('Flamme 🔥', h('p', { class: 'pf-hint' }, 'Allume 🔥 ce que tu dois faire chaque jour pour garder ta flamme.'), flameBox),
     ...section('Mes routines', h('div', { class: 'card' }, habitsEditor({ value: st.habits || [], onChange: onHabits }))),
     ...section('Amis et notifications',
@@ -107,7 +114,14 @@ export default function profileView(root) {
         h('div', { class: 'row' }, icon('smile', 20),
           h('div', { class: 'row-main' }, h('div', { class: 'row-title' }, 'Partager avec mes amis'), h('div', { class: 'row-sub' }, 'Humeur du jour, séances, journées parfaites')),
           toggle(!!st.shareActivity, (v) => { updateSettings({ shareActivity: v }); schedulePushStatus(); }, 'Partager')),
-        notificationToggle(!!st.notifications?.enabled, (v) => updateSettings({ notifications: { enabled: v } })))),
+        notificationToggle(!!st.notifications?.enabled, (v) => updateSettings({ notifications: { enabled: v } })),
+        h('div', { class: 'row pf-reminder' }, icon('timer', 20),
+          h('div', { class: 'row-main' }, h('div', { class: 'row-title' }, 'Rappel du soir'),
+            h('div', { class: 'row-sub' }, 'Si ta journée n’est pas complète (« ta flamme va s’éteindre »). Avec les notifications activées.'),
+            segmented([['off', 'Aucun'], ['19', '19 h'], ['20', '20 h'], ['21', '21 h'], ['22', '22 h']],
+              st.notifications?.reminderHour == null ? 'off' : String(st.notifications.reminderHour),
+              (v) => { updateSettings({ notifications: { reminderHour: v === 'off' ? null : Number(v) } }); schedulePushStatus(); }))))),
+    h('button', { class: 'btn ghost block', onClick: async () => { await updateMeta({ tourDone: false, help: {} }); navigate('/'); } }, icon('info', 18), 'Revoir le tutoriel'),
     h('button', { class: 'btn ghost block', onClick: () => navigate('/welcome') }, icon('refresh', 18), 'Refaire le questionnaire d’accueil'));
 
   root.append(h('div', { class: 'view' }, pageHeader({ title: 'Profil', onBack: () => back('/') }), page));

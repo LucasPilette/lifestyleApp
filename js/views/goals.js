@@ -4,7 +4,8 @@
 
 import { h, icon } from '../core/dom.js';
 import { state, doneSessions, updateSettings } from '../core/store.js';
-import { evaluateGoal, goalDef, ADDABLE_GOALS } from '../core/goals.js';
+import { evaluateGoal, goalDef, addableGoals } from '../core/goals.js';
+import { cleanWidgets } from '../core/prefs.js';
 import { todayKey, formatShort, agoLabel } from '../core/date.js';
 import { back, navigate } from '../core/router.js';
 import { pageHeader, toast, sheet } from '../core/ui.js';
@@ -16,9 +17,10 @@ import { successSound } from '../core/feedback.js';
 /** Évalue les objectifs de la liste et mémorise la date de première réussite. */
 export function evaluateAll() {
   const today = todayKey();
-  const ctx = { days: state.days, sessions: doneSessions(), exercises: state.exercises, today };
+  const ctx = { days: state.days, sessions: doneSessions(), exercises: state.exercises, today, custom: state.settings.customWidgets || [] };
   const objectives = state.settings.objectives || {};
-  const results = goalList().map((key) => evaluateGoal(key, objectives[key], ctx));
+  // Un objectif dont le widget a été supprimé n'est plus affiché.
+  const results = goalList().map((key) => evaluateGoal(key, objectives[key], ctx)).filter((r) => r.def.kind !== 'unknown');
   const newly = results.filter((r) => r.status === 'met' && !r.cfg?.achievedAt);
   if (newly.length) {
     updateSettings({ objectives: Object.fromEntries(newly.map((r) => [r.key, { achievedAt: today }])) });
@@ -71,12 +73,14 @@ export default function goalsView(root) {
   /** Choix d'un nouvel objectif parmi ce que l'app mesure. */
   function addGoal() {
     const list = goalList();
-    const options = ADDABLE_GOALS.filter((g) => !list.includes(g.key) || state.settings.objectives?.[g.key]?.target == null);
+    const custom = state.settings.customWidgets || [];
+    const widgets = cleanWidgets(state.settings.widgets, custom);
+    const options = addableGoals(widgets, custom).filter((g) => !list.includes(g.key) || state.settings.objectives?.[g.key]?.target == null);
     sheet((close) => {
       const items = [];
       let lastGroup = null;
       for (const g of options) {
-        const def = goalDef(g.key, state.exercises);
+        const def = goalDef(g.key, state.exercises, custom);
         if (g.group !== lastGroup) {
           items.push(h('div', { class: 'picker-group' }, g.group));
           lastGroup = g.group;
@@ -84,10 +88,11 @@ export default function goalsView(root) {
         items.push(h('button', { class: 'picker-item', style: { '--c': def.color }, onClick: async () => {
           close();
           await create(g.key);
-        } }, h('span', { class: 'goal-dot' }), h('span', null, def.label), h('span', { class: 'muted' }, def.kind === 'avg' ? 'moy. 30 j' : '')));
+        } }, h('span', { class: 'goal-dot' }), h('span', null, def.label), h('span', { class: 'muted' }, def.kind === 'avg' || def.kind === 'cavg' ? 'moy. 30 j' : def.kind === 'rate' ? 'jours / 30' : def.kind === 'clast' ? 'dernière valeur' : '')));
       }
-      items.push(h('div', { class: 'picker-group' }, 'Force'));
-      items.push(h('button', { class: 'picker-item', style: { '--c': 'var(--accent)' }, onClick: async () => {
+      if (!options.length && !widgets.includes('training')) items.push(h('p', { class: 'sheet-text' }, 'Ajoute des widgets à ton accueil (profil ou bouton « + ») pour pouvoir leur fixer des objectifs.'));
+      if (widgets.includes('training')) items.push(h('div', { class: 'picker-group' }, 'Force'));
+      if (widgets.includes('training')) items.push(h('button', { class: 'picker-item', style: { '--c': 'var(--accent)' }, onClick: async () => {
         close();
         const exId = await pickExercise({ title: '1RM réel sur…' });
         if (exId) await create(exId === 'bench' ? 'bench' : `lift:${exId}`);
@@ -97,7 +102,7 @@ export default function goalsView(root) {
   }
 
   async function create(key) {
-    const ctx = { days: state.days, sessions: doneSessions(), exercises: state.exercises, today: todayKey() };
+    const ctx = { days: state.days, sessions: doneSessions(), exercises: state.exercises, today: todayKey(), custom: state.settings.customWidgets || [] };
     const r = evaluateGoal(key, state.settings.objectives?.[key], ctx);
     if (await editGoal(key, { current: r.value, isNew: true })) render();
   }

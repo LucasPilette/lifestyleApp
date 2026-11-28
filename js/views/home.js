@@ -2,14 +2,16 @@
 // (titre coloré + résumé ; un appui déroule la saisie, la flèche la replie).
 
 import { h, icon, iconButton, numInput } from '../core/dom.js';
-import { state, getDay, setDayField, setDayFields, activeSession, doneSessions, sessionColor, updateSettings } from '../core/store.js';
+import { state, getDay, setDayField, setDayFields, setDayCustom, activeSession, doneSessions, sessionColor, updateSettings, updateMeta } from '../core/store.js';
 import { todayKey, addDays, formatLong, formatShort, weekStart, dateKey, agoLabel, formatWeekday } from '../core/date.js';
 import { METRICS, MOODS, meetsGoal, dayChecklist, perfectStreak, flameChecker, weekTraining, weightRequired, lastValueBefore } from '../core/metrics.js';
 import { navigate } from '../core/router.js';
 import { fmtNum, fmtClock, fmtSleep, parseNum } from '../core/format.js';
 import { debounce } from '../core/util.js';
 import { toast, sheet } from '../core/ui.js';
-import { WIDGETS, cleanWidgets, flameRules, toggleHabit, habitsComplete, reconcileHabits } from '../core/prefs.js';
+import { allWidgets, cleanWidgets, flameRules, toggleHabit, habitsComplete, reconcileHabits, CUSTOM_KINDS, customDone, customSummary, toggleCustomItem } from '../core/prefs.js';
+import { startTour } from '../components/tour.js';
+import { inboxCount } from '../core/social.js';
 import { habitsEditor } from '../components/prefs-ui.js';
 import { haptic } from '../core/feedback.js';
 import { dayRings } from '../components/ring.js';
@@ -57,8 +59,10 @@ export default function home(root, dateParam) {
   const date = dateParam && dateParam < today ? dateParam : today;
   const isToday = date === today;
   const goals = state.settings.goals;
-  const widgets = cleanWidgets(state.settings.widgets);
-  const rules = flameRules(state.settings); // { items, weekly }
+  const customs = state.settings.customWidgets || [];
+  const widgets = cleanWidgets(state.settings.widgets, customs);
+  const rules = flameRules(state.settings); // { items, weekly, custom }
+  const defs = allWidgets(customs);
   const hasTraining = widgets.includes('training');
   const day = () => getDay(date) || {};
   const sessionDays = sessionDaySet();
@@ -96,7 +100,7 @@ export default function home(root, dateParam) {
       cur.color ||= sessionColor(s);
       sessionDays.set(k, cur);
     }
-    openCalendar({ selected: date, today, widgets, isFlame: flameChecker(state.days, today, streakOpts()), sessionDays, onPick: goDay });
+    openCalendar({ selected: date, today, widgets, customs, isFlame: flameChecker(state.days, today, streakOpts()), sessionDays, onPick: goDay });
   };
   const header = h('header', { class: 'topbar home-top' },
     h('div', { class: 'top-left' }, iconButton('menu', 'Menu', openSideMenu, 'glass-btn')),
@@ -117,9 +121,10 @@ export default function home(root, dateParam) {
     graceUntil: state.meta.createdAt ? dateKey(new Date(state.meta.createdAt)) : null,
     items: rules.items,
     weekly: rules.weekly,
+    custom: rules.custom,
   });
   const flameRuleText = () => {
-    const daily = rules.items.map((id) => WIDGETS[id].short);
+    const daily = rules.items.map((id) => defs[id]?.short || id);
     const parts = [];
     if (daily.length) parts.push(`Jour parfait : ${daily.join(', ')} renseignés.`);
     if (rules.weekly) parts.push(`Moins de ${minSessions} séances dans la semaine éteint la flamme.`);
@@ -134,7 +139,7 @@ export default function home(root, dateParam) {
   const hello = `${hour >= 18 || hour < 4 ? 'Bonsoir' : 'Bonjour'}${state.settings.name ? ` ${state.settings.name}` : ''}`;
   const greet = h('section', { class: 'greet' }, h('div', { class: 'greet-text' }, h('h1', null, hello), message, legend), ringBox);
   refreshers.push(() => {
-    const c = dayChecklist(state.days, date, rules.items);
+    const c = dayChecklist(state.days, date, rules.items, rules.custom);
     const n = perfectStreak(state.days, today, streakOpts());
     // semaine du jour affiché (pour un jour passé : sa semaine, comptée jusqu'à dimanche)
     const wk = weekTraining(sessionDateList(), date, minSessions);
@@ -170,7 +175,7 @@ export default function home(root, dateParam) {
   }
 
   // --- Rubrique repliable ---
-  function rubric({ id, color, iconName, title, summary, done, alert, chartTo, body, open }) {
+  function rubric({ id, color, iconName, emoji, title, summary, done, alert, chartTo, body, open }) {
     const key = `rubric:${id}`;
     const stored = sessionStorage.getItem(key);
     let isOpen = stored != null ? stored === '1' : !!open;
@@ -194,7 +199,7 @@ export default function home(root, dateParam) {
         }
       },
     },
-      h('div', { class: 'card-icon' }, icon(iconName)),
+      h('div', { class: 'card-icon' }, emoji ? h('span', { class: 'rb-emoji' }, emoji) : icon(iconName)),
       h('h2', null, title),
       sum,
       status,
@@ -395,33 +400,158 @@ export default function home(root, dateParam) {
     });
   };
 
+  // --- Widgets personnalisés ---
+  const customSavers = new Map();
+  const saveCustom = (id, value) => {
+    if (!customSavers.has(id)) {
+      customSavers.set(id, debounce((v) => {
+        setDayCustom(date, id, v);
+        refresh();
+      }, 400));
+    }
+    customSavers.get(id)(value);
+  };
+  const flushCustom = () => customSavers.forEach((d) => d.pending());
+  for (const def of customs) builders[def.id] = () => customRubric(def);
+
+  function customRubric(def) {
+    const val = () => day().custom?.[def.id];
+    const setNow = (v) => {
+      setDayCustom(date, def.id, v);
+      haptic();
+      refresh();
+    };
+    let body;
+    if (def.kind === 'checklist') {
+      body = h('div', { class: 'habit-checks', style: { '--c-routine': def.color } });
+      const render = () => {
+        const done = new Set(val()?.done || []);
+        body.replaceChildren(...(def.items || []).map((x) => h('button', {
+          class: `habit-check ${done.has(x.id) ? 'on' : ''}`, role: 'checkbox', 'aria-checked': String(done.has(x.id)),
+          onClick: () => { setNow(toggleCustomItem(val(), x.id, def.items)); render(); },
+        }, h('span', { class: 'cc-box', 'aria-hidden': 'true' }, done.has(x.id) ? icon('check', 15) : null), h('span', null, x.name))));
+      };
+      render();
+    } else if (def.kind === 'check') {
+      body = h('button', { class: 'cw-check', role: 'switch' });
+      const render = () => {
+        const on = val() === true;
+        body.className = `cw-check ${on ? 'on' : ''}`;
+        body.setAttribute('aria-checked', String(on));
+        body.replaceChildren(icon('check', 20), on ? 'Fait aujourd’hui' : 'Marquer comme fait');
+      };
+      body.addEventListener('click', () => { setNow(val() === true ? null : true); render(); });
+      render();
+    } else if (def.kind === 'emoji') {
+      body = h('div', { class: 'moods', role: 'radiogroup', 'aria-label': def.name, style: { '--c-mood': def.color } });
+      const render = () => body.replaceChildren(...(def.emojis || []).map((e, i) => h('button', {
+        class: `mood ${val() === i + 1 ? 'sel' : ''}`, role: 'radio', 'aria-checked': String(val() === i + 1), 'aria-label': `${i + 1} sur 5`,
+        onClick: () => { setNow(val() === i + 1 ? null : i + 1); render(); },
+      }, e)));
+      render();
+    } else if (def.kind === 'number') {
+      const pct = h('span', { class: 'mf-pct' });
+      const bar = h('i');
+      const update = (v) => {
+        if (def.target == null) return;
+        const ok = v != null && (def.dir === 'max' ? v <= def.target : v >= def.target);
+        bar.style.width = `${Math.min(100, ((v || 0) / def.target) * 100)}%`;
+        pct.textContent = v == null ? '' : ok ? '✓' : `${fmtNum(Math.round(((v || 0) / def.target) * 100))} %`;
+        pct.classList.toggle('ok', ok);
+      };
+      const v0 = val();
+      const input = numInput({
+        value: v0 != null ? String(v0).replace('.', ',') : '', placeholder: def.target != null ? String(def.target).replace('.', ',') : '0', label: def.name, decimal: !!def.decimals,
+        onInput: (e) => {
+          const v = parseNum(e.target.value);
+          const clean = v == null ? null : def.decimals ? Math.round(v * 10) / 10 : Math.round(v);
+          update(clean);
+          saveCustom(def.id, clean);
+        },
+      });
+      update(v0 ?? null);
+      const target = def.target != null ? `Objectif : ${def.dir === 'max' ? 'au plus' : 'au moins'} ${String(def.target).replace('.', ',')} ${def.unit || ''}` : isToday ? 'Aujourd’hui' : 'Ce jour-là';
+      body = h('div', { class: 'mf', style: { '--c': def.color } },
+        h('div', { class: 'mf-label' }, h('span', null, target), pct),
+        h('div', { class: 'with-unit' }, input, h('span', { class: 'unit' }, def.unit || '')),
+        def.target != null ? h('div', { class: 'progress' }, bar) : null);
+    } else {
+      body = h('textarea', { class: 'text-input mood-note', rows: 3, maxlength: 500, placeholder: 'Écris quelques mots…' }, val() || '');
+      body.addEventListener('input', () => saveCustom(def.id, body.value.trim() || null));
+    }
+    return rubric({
+      id: def.id, color: def.color, iconName: CUSTOM_KINDS[def.kind]?.icon || 'flag', emoji: def.emoji, title: def.name,
+      summary: () => customSummary(def, val()),
+      done: () => customDone(def, val()),
+      body: [body, h('button', { class: 'link-btn rb-edit', onClick: () => navigate(`/widgets/${def.id}`) }, 'Modifier ce widget')],
+    });
+  }
+
   for (const id of widgets) if (builders[id]) page.append(builders[id]());
+  // « + » sous le dernier widget : créer un widget ou en ajouter un prêt à l'emploi
+  page.append(h('button', { class: 'add-widget', onClick: () => navigate('/widgets/new') }, icon('plus', 20), 'Ajouter un widget'));
 
 
-  // --- Bouton S'entraîner ---
+  // --- Barre du bas : amis, s'entraîner (si l'entraînement est suivi), objectifs ---
   const active = activeSession();
-  const ctaSub = h('span', { class: 'cta-sub' });
-  const cta = h('button', { class: `cta ${active ? 'resume' : ''}`, style: active && sessionColor(active) ? { '--tc': sessionColor(active) } : null, onClick: () => navigate(active ? '/workout' : '/train') },
-    icon(active ? 'play' : 'dumbbell', 24),
-    active ? [h('span', null, 'Reprendre'), ctaSub] : h('span', null, 'S’entraîner'));
+  const showTrain = hasTraining || !!active;
+  const trainSub = h('span', { class: 'dock-sub tnum' });
+  const inbox = h('span', { class: 'badge dock-badge hidden' });
+  const dock = h('nav', { class: `dock ${showTrain ? 'with-main' : ''}`, 'aria-label': 'Raccourcis' },
+    h('button', { class: 'dock-btn chat', onClick: () => navigate('/friends') },
+      h('span', { class: 'dock-ic' }, icon('message', 22), inbox), h('span', { class: 'dock-label' }, 'Amis')),
+    showTrain
+      ? h('button', {
+          class: `dock-main ${active ? 'resume' : ''}`, style: active && sessionColor(active) ? { '--tc': sessionColor(active) } : null,
+          onClick: () => navigate(active ? '/workout' : '/train'),
+        }, icon(active ? 'play' : 'dumbbell', 22), h('span', { class: 'dock-main-txt' }, h('b', null, active ? 'Reprendre' : 'S’entraîner'), active ? trainSub : null))
+      : null,
+    h('button', { class: 'dock-btn goals', onClick: () => navigate('/goals') },
+      h('span', { class: 'dock-ic' }, icon('trophy', 22)), h('span', { class: 'dock-label' }, 'Objectifs')));
   let timer;
   if (active) {
-    const tick = () => { ctaSub.textContent = `${active.name} · ${fmtClock((Date.now() - active.startedAt) / 1000)}`; };
+    const tick = () => { trainSub.textContent = fmtClock((Date.now() - active.startedAt) / 1000); };
     tick();
     timer = setInterval(tick, 1000);
   }
+  inboxCount().then((n) => {
+    if (!n) return;
+    inbox.textContent = n > 99 ? '99+' : String(n);
+    inbox.classList.remove('hidden');
+  }).catch(() => {});
 
   refresh();
-  // Le bouton S'entraîner n'apparaît qu'avec le widget Entraînement (ou une séance en cours).
-  const showCta = hasTraining || !!active;
-  root.append(h('div', { class: 'home-bg', 'aria-hidden': 'true' }), h('div', { class: `view ${showCta ? 'has-cta' : ''}` }, header, page), showCta ? h('div', { class: 'cta-bar' }, cta) : '');
+  root.append(h('div', { class: 'home-bg', 'aria-hidden': 'true' }), h('div', { class: 'view has-cta' }, header, page), dock);
+
+  // Tutoriel à la première ouverture (après l'onboarding)
+  if (isToday && state.meta.onboarded && !state.meta.tourDone) {
+    setTimeout(() => {
+      if (!document.body.contains(dock)) return;
+      startTour(homeTour(), { onDone: () => updateMeta({ tourDone: true }) });
+    }, 700);
+  }
 
   return () => {
     clearInterval(timer);
     flushAll();
+    flushCustom();
     document.removeEventListener('visibilitychange', onHide);
     window.removeEventListener('pagehide', flushAll);
   };
+}
+
+/** Étapes du tutoriel de l'accueil. */
+function homeTour() {
+  return [
+    { sel: '.ring-box', title: 'Ta flamme 🔥', text: 'Chaque jour où tu remplis ce qui compte pour ta flamme, elle grandit d’un jour. L’anneau montre où tu en es ; touche-le pour revoir les règles.' },
+    { sel: '.home-page .rubric', title: 'Tes widgets', text: 'Touche un widget pour saisir ta journée. La pastille cochée indique que c’est fait ; l’icône de courbe ouvre ton suivi.' },
+    { sel: '.add-widget', title: 'Crée tes widgets', text: 'Liste à cocher, oui / non, émoji, chiffre ou texte : ajoute ce que tu veux suivre, et choisis s’il compte pour ta flamme.' },
+    { sel: '.day-label', title: 'Le calendrier', text: 'Touche la date pour voir le mois : tes flammes et les jours renseignés. Les flèches passent d’un jour à l’autre.' },
+    { sel: '.top-left .icon-btn', title: 'Le menu', text: 'Ton profil (code ami, thème, widgets, flamme, rappels), tes amis, l’historique et les paramètres.' },
+    { sel: '.dock-btn.chat', title: 'Tes amis', text: 'Ajoute tes amis avec leur code à 6 chiffres, discutez et suivez vos flammes.' },
+    { sel: '.dock-main', title: 'S’entraîner', text: 'Lance une séance : charges proposées, minuteur de repos, records. Pas encore de programme ? Le coach IA t’en crée un en une minute.' },
+    { sel: '.dock-btn.goals', title: 'Tes objectifs', text: 'Fixe-toi des objectifs sur tes widgets (moyenne, dernière valeur, régularité) et suis ta progression.' },
+  ];
 }
 
 function trainingRubric(rubric, date, today, sessionDays) {

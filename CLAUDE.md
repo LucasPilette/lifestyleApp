@@ -16,3 +16,8 @@
 - Amis : Supabase via `js/core/supabase.js` (fetch, sans SDK). Tout changement de base passe par `supabase/schema.sql`
   (ré-exécutable) et doit garder les règles RLS. Notifications : fonction Edge `supabase/functions/push` (déployée à la main
   depuis le tableau de bord), qui décide des destinataires via `push_targets` ; l'app n'envoie que des événements.
+  Coach IA : fonction Edge `supabase/functions/coach` (SDK Anthropic, sortie JSON contrainte) ; la réponse est toujours
+  revalidée côté app par `programToTemplates` (`js/core/program.js`).
+- Widgets : intégrés (`WIDGETS`) ou personnalisés (`settings.customWidgets`, valeurs dans `day.custom[id]`) ;
+  toujours passer les widgets personnalisés à `cleanWidgets` / `dayChecklist` / `goalDef` (voir `js/core/prefs.js`).
+- `el.append(...)` / `replaceChildren(...)` écrivent « null » en texte : passer `''`, pas `null` (contrairement à `h()`).

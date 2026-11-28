@@ -4,6 +4,8 @@
 //   event = 'vapid'          -> renvoie la clé publique VAPID (pour abonner l'appareil)
 //           'message' | 'friend_request' | 'friend_accept' (to = id de l'ami)
 //           'mood' | 'perfect' (à tous les amis, si l'utilisateur partage son activité)
+// Appelée aussi toutes les 15 min par la tâche planifiée « eclipse-rappels » (en-tête x-cron-secret) :
+// rappels du soir pour les journées pas encore complètes.
 // Le serveur décide seul des destinataires et du texte (fonction SQL push_targets) : l'app ne peut
 // notifier que ses amis, une seule fois par événement.
 // Les clés VAPID sont créées au premier appel et gardées dans la base : aucun secret à configurer.
@@ -142,6 +144,27 @@ export async function handler(req) {
   if (req.method !== 'POST') return json({ error: 'POST attendu' }, 405);
   try {
     if (!SERVICE_KEY) return json({ error: 'Clé service indisponible' }, 500);
+
+    // Tâche planifiée (pg_cron) : rappels du soir, authentifiée par un secret partagé.
+    const cronHeader = req.headers.get('x-cron-secret');
+    if (cronHeader) {
+      const secret = await rpc('cron_secret');
+      if (!secret || cronHeader !== secret) return json({ error: 'Secret invalide' }, 401);
+      const due = (await rpc('push_reminders')) || [];
+      if (!due.length) return json({ sent: 0 });
+      const vapid = await vapidKeys();
+      const results = await Promise.all(due.map(async (r) => {
+        try {
+          const res = await sendPush(r, JSON.stringify({ title: r.title, body: r.body, url: r.url, tag: r.tag }), vapid);
+          if (res.status === 404 || res.status === 410) await rpc('push_drop', { p_endpoint: r.endpoint });
+          return res.status;
+        } catch {
+          return 0;
+        }
+      }));
+      return json({ sent: results.filter((s) => s >= 200 && s < 300).length, results });
+    }
+
     // Utilisateur du jeton, vérifié par le serveur d'authentification.
     const authRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
       headers: { apikey: SERVICE_KEY, Authorization: req.headers.get('Authorization') || '' },

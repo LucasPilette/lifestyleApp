@@ -207,14 +207,16 @@ export default function welcomeView(root) {
   }
 
   async function finish() {
+    const keptCustom = (st.widgets || []).filter((wid) => (st.customWidgets || []).some((c) => c.id === wid));
     const goals = { ...d.goals };
     updateSettings({
       name: d.name.trim(),
       theme: d.theme,
       mode: d.mode,
       focus: d.focus,
-      widgets: d.widgets,
-      flame: d.flame.filter((f) => d.widgets.includes(f)),
+      // Les widgets personnalisés déjà affichés sont conservés (le questionnaire ne porte que sur les widgets intégrés).
+      widgets: [...d.widgets, ...keptCustom],
+      flame: [...d.flame.filter((f) => d.widgets.includes(f)), ...(st.flame || []).filter((f) => keptCustom.includes(f))],
       goals,
       habits: d.habits,
       notifications: { enabled: d.notifications },

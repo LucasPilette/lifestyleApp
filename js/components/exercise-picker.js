@@ -50,7 +50,11 @@ export function pickExercise({ title = 'Choisir un exercice', exclude = [] } = {
       };
       search.addEventListener('input', render);
       render();
-      return [h('div', { class: 'picker-search' }, search), list];
+      const createBtn = h('button', { class: 'picker-item picker-new', onClick: async () => {
+        const ex = await editExercise({ name: search.value.trim() });
+        if (ex) finish(ex.id, close);
+      } }, icon('plus', 18), 'Nouvel exercice');
+      return [h('div', { class: 'picker-search' }, search), createBtn, list];
     }, { title, onClose: () => !resolved && resolve(null) });
   });
 }

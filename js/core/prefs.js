@@ -48,10 +48,73 @@ export function focusForWidgets(widgets = []) {
   return FOCUS.filter((f) => f.widgets.some((w) => widgets.includes(w))).map((f) => f.id);
 }
 
-/** Liste de widgets nettoyée (ids connus, sans doublon, ordre de l'utilisateur conservé). */
-export function cleanWidgets(list) {
+/** Liste de widgets nettoyée (ids connus, widgets personnalisés compris, sans doublon, ordre conservé). */
+export function cleanWidgets(list, customWidgets = []) {
+  const custom = new Set((customWidgets || []).map((c) => c.id));
   const seen = new Set();
-  return (Array.isArray(list) ? list : []).filter((w) => WIDGETS[w] && !seen.has(w) && seen.add(w));
+  return (Array.isArray(list) ? list : []).filter((w) => (WIDGETS[w] || custom.has(w)) && !seen.has(w) && seen.add(w));
+}
+
+// --- Widgets personnalisés ----------------------------------------------------------
+// { id: 'cw_…', kind, name, emoji, color, items?: [{ id, name }], emojis?: string[5], unit?, target?, dir?, decimals? }
+// Valeur du jour dans day.custom[id] : checklist { done: [ids], total }, check true, emoji 1..5, number, text.
+
+export const CUSTOM_KINDS = {
+  checklist: { label: 'Liste à cocher', sub: 'Plusieurs choses à faire dans la journée', icon: 'list', example: 'Routine du matin' },
+  check: { label: 'Oui / non', sub: 'Une seule chose, faite ou pas', icon: 'check', example: 'Méditer 10 min' },
+  emoji: { label: 'Émoji', sub: 'Une note du jour en émoji (énergie, stress…)', icon: 'smile', example: 'Énergie' },
+  number: { label: 'Chiffre', sub: 'Une valeur avec son unité et un objectif', icon: 'chart', example: 'Verres d’eau' },
+  text: { label: 'Texte', sub: 'Quelques mots chaque jour (journal, gratitude…)', icon: 'note', example: 'Gratitude' },
+};
+export const CUSTOM_COLORS = ['#22c3d6', '#a78bfa', '#f472b6', '#fbbf24', '#4ade80', '#fb923c', '#60a5fa', '#f87171'];
+export const EMOJI_PRESETS = [
+  { label: 'Énergie', emojis: ['🪫', '😴', '😐', '💪', '⚡'] },
+  { label: 'Stress', emojis: ['😫', '😟', '😐', '🙂', '😌'] },
+  { label: 'Motivation', emojis: ['🥱', '😕', '😐', '🙂', '🔥'] },
+  { label: 'Douleurs', emojis: ['🤕', '😣', '😐', '🙂', '✅'] },
+  { label: 'Concentration', emojis: ['🌫️', '😵‍💫', '😐', '🧠', '🎯'] },
+];
+export const ICON_SUGGESTIONS = ['💧', '📖', '🧘', '🚭', '💊', '🥗', '☕', '🍷', '🦷', '🐶', '🎸', '🧹', '💤', '🙏', '✍️', '🚿', '🌳', '📵', '🧠', '⚡', '🏃', '🎯'];
+
+/** Widgets disponibles (intégrés + personnalisés) : id -> { label, icon | emoji, color, short, desc, custom? }. */
+export function allWidgets(customWidgets = []) {
+  const out = { ...WIDGETS };
+  for (const c of customWidgets || []) {
+    out[c.id] = { label: c.name, icon: CUSTOM_KINDS[c.kind]?.icon || 'flag', emoji: c.emoji || null, color: c.color || CUSTOM_COLORS[0], short: c.name.toLowerCase(), desc: CUSTOM_KINDS[c.kind]?.label || '', custom: true };
+  }
+  return out;
+}
+
+/** Le widget personnalisé est-il « fait » ce jour-là ? (compte pour la flamme) */
+export function customDone(def, v) {
+  if (!def || v == null) return false;
+  if (def.kind === 'checklist') return (v.total || 0) > 0 && (v.done?.length || 0) >= v.total;
+  if (def.kind === 'check') return v === true;
+  if (def.kind === 'emoji') return Number.isInteger(v) && v >= 1;
+  if (def.kind === 'number') return typeof v === 'number' && Number.isFinite(v);
+  if (def.kind === 'text') return typeof v === 'string' && v.trim().length > 0;
+  return false;
+}
+
+/** Coche / décoche un élément d'une liste personnalisée (total mémorisé pour la journée). null = rien de coché. */
+export function toggleCustomItem(value, itemId, items) {
+  const ids = new Set(items.map((x) => x.id));
+  const done = new Set((value?.done || []).filter((id) => ids.has(id)));
+  if (done.has(itemId)) done.delete(itemId);
+  else done.add(itemId);
+  const list = items.map((x) => x.id).filter((id) => done.has(id));
+  return list.length ? { done: list, total: items.length } : null;
+}
+
+/** Résumé court d'une valeur (en-tête de la rubrique). */
+export function customSummary(def, v) {
+  if (v == null) return null;
+  if (def.kind === 'checklist') return `${v.done?.length || 0}/${def.items?.length || v.total || 0}`;
+  if (def.kind === 'check') return v === true ? 'Fait' : null;
+  if (def.kind === 'emoji') return def.emojis?.[v - 1] || null;
+  if (def.kind === 'number') return `${String(v).replace('.', ',')}${def.unit ? ` ${def.unit}` : ''}`;
+  if (def.kind === 'text') return v.length > 24 ? `${v.slice(0, 24)}…` : v;
+  return null;
 }
 
 /** Flamme proposée par défaut pour des widgets : tout ce qui se renseigne chaque jour, sauf le poids et les pas. */
@@ -61,12 +124,18 @@ export function defaultFlameFor(widgets) {
 
 /**
  * Critères de flamme effectifs (seuls les widgets affichés comptent).
- * @returns {{ items: string[], weekly: boolean }} items = widgets quotidiens exigés ; weekly = minimum de séances par semaine
+ * @returns {{ items: string[], weekly: boolean, custom: object }} items = widgets quotidiens exigés ; weekly = minimum de séances
+ *   par semaine ; custom = définitions des widgets personnalisés (id -> widget)
  */
 export function flameRules(settings = {}) {
-  const widgets = cleanWidgets(settings.widgets ?? DEFAULT_WIDGETS);
+  const customWidgets = settings.customWidgets || [];
+  const widgets = cleanWidgets(settings.widgets ?? DEFAULT_WIDGETS, customWidgets);
   const flame = (settings.flame ?? DEFAULT_FLAME).filter((w) => widgets.includes(w));
-  return { items: flame.filter((w) => !WIDGETS[w].weekly), weekly: flame.includes('training') };
+  return {
+    items: flame.filter((w) => !WIDGETS[w]?.weekly),
+    weekly: flame.includes('training'),
+    custom: Object.fromEntries(customWidgets.map((c) => [c.id, c])),
+  };
 }
 
 // --- Habitudes (routines) ---------------------------------------------------

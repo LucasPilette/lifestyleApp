@@ -93,15 +93,16 @@ export default function settingsView(root) {
     }
   });
 
-  const widgets = cleanWidgets(st.widgets);
+  const widgets = cleanWidgets(st.widgets, st.customWidgets);
   const has = (w) => widgets.includes(w);
 
   // Objectifs à long terme : un appui ouvre le réglage
   const goalsList = h('div', { class: 'list' });
   const renderGoals = () => {
-    const ctx = { days: state.days, sessions: doneSessions(), exercises: state.exercises, today: todayKey() };
+    const ctx = { days: state.days, sessions: doneSessions(), exercises: state.exercises, today: todayKey(), custom: state.settings.customWidgets || [] };
     goalsList.replaceChildren(...goalList().map((id) => {
       const r = evaluateGoal(id, state.settings.objectives?.[id], ctx);
+      if (r.def.kind === 'unknown') return '';
       const fmt = r.def.fmt;
       const value = r.status === 'unset' ? 'À définir' : `${r.dir === 'max' ? '≤ ' : ''}${fmt(r.cfg.target)}`;
       return h('button', { class: 'row', onClick: async () => { if (await editGoal(id, { current: r.value })) renderGoals(); } },

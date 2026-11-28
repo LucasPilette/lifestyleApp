@@ -3,7 +3,7 @@
 
 import { addDays, addMonths, diffDays, formatMonth, formatShort, keysBetween, monthEnd, monthStart, weekStart, dayMonth, formatMonthLong } from './date.js';
 import { fmtNum, fmtSleep } from './format.js';
-import { habitsComplete } from './prefs.js';
+import { habitsComplete, customDone } from './prefs.js';
 
 export const METRICS = {
   sleepMin: {
@@ -82,10 +82,15 @@ export const DEFAULT_DAILY = ['sleep', 'nutrition', 'mood'];
 /**
  * Jour parfait = toutes les rubriques choisies pour la flamme sont faites
  * (par défaut : sommeil durée + qualité, nutrition calories + protéines, humeur).
+ * `custom` : définitions des widgets personnalisés (id -> widget), pour les ids qui en sont.
  */
-export function dayChecklist(days, date, itemIds = DEFAULT_DAILY) {
+export function dayChecklist(days, date, itemIds = DEFAULT_DAILY, custom = {}) {
   const d = days.get(date) || {};
-  const items = itemIds.filter((id) => DAY_CHECKS[id]).map((id) => ({ id, label: DAY_CHECKS[id].label, ok: DAY_CHECKS[id].ok(d, days, date) }));
+  const items = [];
+  for (const id of itemIds) {
+    if (DAY_CHECKS[id]) items.push({ id, label: DAY_CHECKS[id].label, ok: DAY_CHECKS[id].ok(d, days, date) });
+    else if (custom[id]) items.push({ id, label: custom[id].name.toLowerCase(), ok: customDone(custom[id], d.custom?.[id]) });
+  }
   const missing = items.filter((i) => !i.ok).map((i) => i.label);
   return { items, missing, done: items.length - missing.length, perfect: items.length > 0 && missing.length === 0 };
 }
@@ -126,10 +131,11 @@ export function perfectStreak(days, today, opts = {}) {
 /**
  * Renvoie (key) => le jour a-t-il sa flamme ? Jour parfait, dans une semaine qui n'a pas éteint la flamme
  * (mêmes règles que perfectStreak). Sert au calendrier.
- * Options : items = rubriques quotidiennes exigées, weekly = minimum de séances par semaine exigé.
+ * Options : items = rubriques quotidiennes exigées, weekly = minimum de séances par semaine exigé,
+ * custom = définitions des widgets personnalisés.
  * Sans rubrique quotidienne, seule la règle des séances compte (à partir du début d'utilisation).
  */
-export function flameChecker(days, today, { sessionDates = [], minSessions = 3, graceUntil = null, items = DEFAULT_DAILY, weekly = true } = {}) {
+export function flameChecker(days, today, { sessionDates = [], minSessions = 3, graceUntil = null, items = DEFAULT_DAILY, weekly = true, custom = {} } = {}) {
   const counts = weekSessionCounts(sessionDates);
   const curWeek = weekStart(today);
   const graceWeek = graceUntil ? weekStart(graceUntil) : null;
@@ -139,7 +145,7 @@ export function flameChecker(days, today, { sessionDates = [], minSessions = 3, 
     const weekFailed = weekly && ws < curWeek && !(graceWeek && ws <= graceWeek) && (counts.get(ws) || 0) < minSessions;
     if (weekFailed) return false;
     if (!items.length) return weekly && !!graceUntil && key >= graceUntil;
-    return dayChecklist(days, key, items).perfect;
+    return dayChecklist(days, key, items, custom).perfect;
   };
 }
 

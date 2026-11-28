@@ -95,6 +95,15 @@ export function drawer(build, { label = 'Menu' } = {}) {
   return close;
 }
 
+/** Calque géré ailleurs (tutoriel…) : fermé lui aussi à la navigation. Renvoie la fonction de désinscription. */
+export function trackOverlay(close) {
+  openSheets.push(close);
+  return () => {
+    const i = openSheets.indexOf(close);
+    if (i >= 0) openSheets.splice(i, 1);
+  };
+}
+
 export function closeAllSheets() {
   [...openSheets].forEach((c) => c());
 }

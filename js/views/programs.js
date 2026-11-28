@@ -5,9 +5,9 @@ import { state, getTemplate, saveTemplate, deleteTemplate, reorderTemplates, exe
 import { TEMPLATE_COLORS } from '../data/seed.js';
 import { fmtRest, parseNum } from '../core/format.js';
 import { back, navigate } from '../core/router.js';
-import { actionSheet, confirmSheet, pageHeader, stepper, toggle, toast } from '../core/ui.js';
+import { actionSheet, confirmSheet, pageHeader, stepper, toggle, toast, promptSheet } from '../core/ui.js';
 import { debounce, uid, clone } from '../core/util.js';
-import { pickExercise } from '../components/exercise-picker.js';
+import { pickExercise, editExercise } from '../components/exercise-picker.js';
 import { estimateMinutes } from './train.js';
 
 const newItem = (exerciseId) => ({ id: uid(), exerciseId, alternatives: [], sets: [{ n: 3, min: 8, max: 12, tag: '' }], warmup: false, note: '' });
@@ -38,8 +38,10 @@ export function programsView(root) {
     reorderTemplates(ids);
     render();
   };
-  const create = () => {
-    const t = { id: uid(), name: 'Nouvelle séance', subtitle: '', order: state.templates.length, blocks: [], createdAt: Date.now() };
+  const create = async () => {
+    const name = await promptSheet({ title: 'Nouvelle séance', placeholder: 'Nom (ex. Haut du corps, Push, Full body)', confirmLabel: 'Créer' });
+    if (name == null) return;
+    const t = { id: uid(), name: name || 'Nouvelle séance', subtitle: '', order: state.templates.length, blocks: [], createdAt: Date.now() };
     saveTemplate(t);
     navigate(`/programs/${t.id}`);
   };
@@ -47,9 +49,11 @@ export function programsView(root) {
   root.append(h('div', { class: 'view' },
     pageHeader({ title: 'Mes séances', onBack: () => back('/train') }),
     h('div', { class: 'page' },
-      h('p', { class: 'muted', style: { fontSize: '13.5px', margin: '0 4px' } }, 'L’ordre détermine la séance suggérée : après Zeus vient la suivante de la liste.'),
+      h('p', { class: 'muted', style: { fontSize: '13.5px', margin: '0 4px' } }, 'L’ordre détermine la séance suggérée : après une séance vient la suivante de la liste.'),
       list,
-      h('button', { class: 'btn primary block', onClick: create }, icon('plus', 18), 'Nouvelle séance'))));
+      h('button', { class: 'btn primary block', onClick: create }, icon('plus', 18), 'Nouvelle séance'),
+      h('button', { class: 'btn block', onClick: () => navigate('/coach') }, icon('zap', 18), 'Créer un programme avec le coach IA'),
+      h('button', { class: 'btn ghost block', onClick: async () => { const ex = await editExercise({}); if (ex) toast(`« ${ex.name} » ajouté à tes exercices`); } }, icon('dumbbell', 18), 'Créer un exercice'))));
 }
 
 export function programEditView(root, id) {

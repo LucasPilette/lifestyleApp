@@ -353,3 +353,103 @@ revoke execute on function public.push_config(), public.push_set_config(text, js
   public.push_targets(uuid, text, uuid) from public, anon, authenticated;
 grant execute on function public.push_config(), public.push_set_config(text, jsonb), public.push_drop(text),
   public.push_targets(uuid, text, uuid) to service_role;
+
+-- --- Rappels du soir (« ta flamme va s'éteindre ») --------------------------------
+-- L'app envoie son fuseau horaire, l'heure de rappel choisie, sa flamme et ce qu'il reste à faire.
+-- Une tâche planifiée (pg_cron) appelle la fonction Edge « push » toutes les 15 minutes.
+alter table public.profiles add column if not exists tz text;
+alter table public.profiles add column if not exists remind_hour smallint check (remind_hour between 0 and 23);
+alter table public.profiles add column if not exists remind_last date;
+alter table public.profiles add column if not exists flame int;
+alter table public.profiles add column if not exists flame_date date;
+alter table public.profiles add column if not exists todo text check (char_length(todo) <= 200);
+alter table public.profiles add column if not exists todo_date date;
+grant update (name, share, mood, mood_date, last_workout_at, perfect_date, streak, tz, remind_hour, flame, flame_date, todo, todo_date, updated_at)
+  on public.profiles to authenticated;
+
+-- Secret partagé entre la tâche planifiée et la fonction Edge (créé une seule fois).
+create table if not exists private.app_secrets (name text primary key, value text not null);
+insert into private.app_secrets (name, value) values ('cron', replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', ''))
+  on conflict (name) do nothing;
+revoke all on all tables in schema private from public, anon, authenticated;
+
+create or replace function public.cron_secret() returns text
+language sql stable security definer set search_path = public, private as $$
+  select value from private.app_secrets where name = 'cron';
+$$;
+
+-- Rappels à envoyer maintenant : heure locale atteinte, pas encore rappelé aujourd'hui, journée pas encore parfaite.
+create or replace function public.push_reminders() returns json
+language plpgsql security definer set search_path = public, private as $$
+declare
+  result json;
+begin
+  with due as (
+    select p.id, p.flame, p.flame_date, p.todo, p.todo_date, (now() at time zone p.tz)::date as local_day
+    from profiles p
+    where p.remind_hour is not null
+      and p.tz in (select name from pg_timezone_names)
+      and extract(hour from now() at time zone p.tz) >= p.remind_hour
+      and (p.remind_last is null or p.remind_last < (now() at time zone p.tz)::date)
+      and (p.perfect_date is null or p.perfect_date < (now() at time zone p.tz)::date)
+      and exists (select 1 from push_subscriptions s where s.user_id = p.id)
+  ), marked as (
+    update profiles p set remind_last = d.local_day from due d where p.id = d.id returning p.id
+  )
+  select coalesce(json_agg(json_build_object(
+    'endpoint', s.endpoint, 'p256dh', s.p256dh, 'auth', s.auth, 'url', './', 'tag', 'rappel',
+    'title', case
+      when coalesce(d.flame, 0) > 0 and d.flame_date >= d.local_day - 1
+        then '🔥 Ta flamme de ' || d.flame || ' jour' || case when d.flame > 1 then 's' else '' end || ' va s’éteindre'
+      else 'Ta journée n’est pas encore complète'
+    end,
+    'body', case
+      when d.todo_date = d.local_day and coalesce(d.todo, '') <> '' then 'Il te reste : ' || d.todo || '.'
+      else 'Prends une minute pour remplir ta journée 🔥'
+    end
+  )), '[]'::json) into result
+  from due d
+  join marked m on m.id = d.id
+  join push_subscriptions s on s.user_id = d.id;
+  return result;
+end $$;
+
+revoke execute on function public.cron_secret(), public.push_reminders() from public, anon, authenticated;
+grant execute on function public.cron_secret(), public.push_reminders() to service_role;
+
+-- Tâche planifiée : toutes les 15 minutes (re-planifier avec le même nom met la tâche à jour).
+create extension if not exists pg_cron with schema pg_catalog;
+create extension if not exists pg_net with schema extensions;
+select cron.schedule(
+  'eclipse-rappels',
+  '*/15 * * * *',
+  $job$
+    select net.http_post(
+      url := 'https://yrifaarzepdrzympudfe.supabase.co/functions/v1/push',
+      headers := jsonb_build_object('Content-Type', 'application/json', 'x-cron-secret', (select value from private.app_secrets where name = 'cron')),
+      body := '{"event":"reminders"}'::jsonb
+    );
+  $job$
+);
+
+-- --- Coach IA : limite de générations de programme par jour ------------------------
+create table if not exists private.ai_usage (
+  user_id uuid not null,
+  day date not null,
+  n int not null default 0,
+  primary key (user_id, day)
+);
+revoke all on all tables in schema private from public, anon, authenticated;
+
+create or replace function public.ai_take(p_user uuid, p_limit int) returns boolean
+language plpgsql security definer set search_path = public, private as $$
+declare
+  used int;
+begin
+  insert into private.ai_usage (user_id, day, n) values (p_user, current_date, 1)
+  on conflict (user_id, day) do update set n = private.ai_usage.n + 1
+  returning n into used;
+  return used <= p_limit;
+end $$;
+revoke execute on function public.ai_take(uuid, int) from public, anon, authenticated;
+grant execute on function public.ai_take(uuid, int) to service_role;

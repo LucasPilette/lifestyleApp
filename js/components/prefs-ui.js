@@ -50,7 +50,7 @@ export function focusPicker({ value, onChange }) {
  * Widgets de l'accueil : activer / désactiver, et réordonner si `reorder`.
  * `suggested` : widgets proposés d'après les objectifs (badge « Suggéré »).
  */
-export function widgetPicker({ value, suggested = [], reorder = false, onChange }) {
+export function widgetPicker({ value, suggested = [], reorder = false, onChange, defs = WIDGETS, onEdit }) {
   let list = [...value];
   const wrap = h('div', { class: 'widget-list' });
   const move = (id, d) => {
@@ -62,7 +62,7 @@ export function widgetPicker({ value, suggested = [], reorder = false, onChange 
     onChange([...list]);
   };
   const row = (id, on) => {
-    const w = WIDGETS[id];
+    const w = defs[id];
     const i = list.indexOf(id);
     return h('div', { class: `widget-row ${on ? 'on' : ''}`, style: { '--c': w.color } },
       h('button', {
@@ -74,11 +74,12 @@ export function widgetPicker({ value, suggested = [], reorder = false, onChange 
           onChange([...list]);
         },
       },
-        h('span', { class: 'card-icon' }, icon(w.icon, 18)),
+        h('span', { class: 'card-icon' }, w.emoji ? h('span', { class: 'rb-emoji' }, w.emoji) : icon(w.icon, 18)),
         h('span', { class: 'wr-txt' },
           h('b', null, w.label, suggested.includes(id) && !reorder ? h('em', { class: 'wr-badge' }, 'Suggéré') : null),
           h('span', null, w.desc)),
         h('span', { class: 'cc-box', 'aria-hidden': 'true' }, on ? icon('check', 16) : null)),
+      w.custom && onEdit ? h('button', { class: 'icon-btn small wr-edit', 'aria-label': `Modifier ${w.label}`, onClick: () => onEdit(id) }, icon('edit', 17)) : null,
       reorder && on
         ? h('span', { class: 'wr-order' },
             h('button', { class: 'icon-btn small', 'aria-label': `Monter ${w.label}`, disabled: i === 0, onClick: () => move(id, -1) }, icon('up', 18)),
@@ -86,11 +87,11 @@ export function widgetPicker({ value, suggested = [], reorder = false, onChange 
         : null);
   };
   const render = () => {
-    const off = Object.keys(WIDGETS).filter((id) => !list.includes(id));
+    const off = Object.keys(defs).filter((id) => !list.includes(id));
     // Onboarding : ordre canonique ; profil : widgets affichés dans leur ordre, puis les autres.
     const items = reorder
       ? [...list.map((id) => row(id, true)), off.length ? h('div', { class: 'widget-sep' }, 'Ajouter à l’accueil') : null, ...off.map((id) => row(id, false))]
-      : Object.keys(WIDGETS).map((id) => row(id, list.includes(id)));
+      : Object.keys(defs).map((id) => row(id, list.includes(id)));
     wrap.replaceChildren(...items.filter(Boolean));
   };
   render();
@@ -111,10 +112,10 @@ export function flameToggle(on, onChange, { compact = false } = {}) {
 }
 
 /** Liste d'habitudes : ajout libre, suggestions, suppression. onChange(habits) */
-export function habitsEditor({ value, onChange }) {
+export function habitsEditor({ value, onChange, placeholder = 'Nouvelle habitude (ex. 🧘 Méditer)' }) {
   let habits = [...value];
   const wrap = h('div', { class: 'habits-editor' });
-  const input = h('input', { class: 'text-input', type: 'text', maxlength: 40, placeholder: 'Nouvelle habitude (ex. 🧘 Méditer)', enterkeyhint: 'done' });
+  const input = h('input', { class: 'text-input', type: 'text', maxlength: 40, placeholder, enterkeyhint: 'done' });
   const add = (name) => {
     const n = (name ?? input.value).trim();
     if (!n) return;
