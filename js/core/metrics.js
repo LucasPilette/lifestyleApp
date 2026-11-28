@@ -3,6 +3,7 @@
 
 import { addDays, addMonths, diffDays, formatMonth, formatShort, keysBetween, monthEnd, monthStart, weekStart, dayMonth, formatMonthLong } from './date.js';
 import { fmtNum, fmtSleep } from './format.js';
+import { habitsComplete } from './prefs.js';
 
 export const METRICS = {
   sleepMin: {
@@ -64,19 +65,29 @@ export function weightRequired(days, date) {
 }
 
 // --- Jour parfait ------------------------------------------------------------
+/** Ce qui rend chaque rubrique « faite » pour la journée. */
+const DAY_CHECKS = {
+  sleep: { label: 'sommeil', ok: (d) => d.sleepMin != null && d.sleepQ != null },
+  nutrition: { label: 'nutrition', ok: (d) => d.kcal != null && d.prot != null },
+  mood: { label: 'humeur', ok: (d) => d.mood != null },
+  // Pesée tous les 3 jours : faite si pesé ce jour-là ou si la dernière pesée est récente.
+  weight: { label: 'poids', ok: (d, days, date) => d.weight != null || !weightRequired(days, date) },
+  steps: { label: 'pas', ok: (d) => d.steps != null },
+  routines: { label: 'routines', ok: (d) => habitsComplete(d) },
+};
+
+/** Critères quotidiens historiques de la flamme. */
+export const DEFAULT_DAILY = ['sleep', 'nutrition', 'mood'];
+
 /**
- * Jour parfait = les priorités sont renseignées : sommeil (durée + qualité),
- * nutrition (calories + protéines) et humeur. Les pas et le poids sont facultatifs.
+ * Jour parfait = toutes les rubriques choisies pour la flamme sont faites
+ * (par défaut : sommeil durée + qualité, nutrition calories + protéines, humeur).
  */
-export function dayChecklist(days, date) {
+export function dayChecklist(days, date, itemIds = DEFAULT_DAILY) {
   const d = days.get(date) || {};
-  const items = [
-    { id: 'sleep', label: 'sommeil', ok: d.sleepMin != null && d.sleepQ != null },
-    { id: 'nutrition', label: 'nutrition', ok: d.kcal != null && d.prot != null },
-    { id: 'mood', label: 'humeur', ok: d.mood != null },
-  ];
+  const items = itemIds.filter((id) => DAY_CHECKS[id]).map((id) => ({ id, label: DAY_CHECKS[id].label, ok: DAY_CHECKS[id].ok(d, days, date) }));
   const missing = items.filter((i) => !i.ok).map((i) => i.label);
-  return { items, missing, done: items.length - missing.length, perfect: missing.length === 0 };
+  return { items, missing, done: items.length - missing.length, perfect: items.length > 0 && missing.length === 0 };
 }
 
 /** Nombre de séances par semaine (clé = lundi). `sessionDates` : une date par séance. */
@@ -103,7 +114,7 @@ export function weekTraining(sessionDates, today, minSessions = 3) {
  */
 export function perfectStreak(days, today, opts = {}) {
   const isFlame = flameChecker(days, today, opts);
-  let k = dayChecklist(days, today).perfect ? today : addDays(today, -1);
+  let k = isFlame(today) ? today : addDays(today, -1);
   let n = 0;
   while (n < 3650 && isFlame(k)) {
     n++;
@@ -115,16 +126,20 @@ export function perfectStreak(days, today, opts = {}) {
 /**
  * Renvoie (key) => le jour a-t-il sa flamme ? Jour parfait, dans une semaine qui n'a pas éteint la flamme
  * (mêmes règles que perfectStreak). Sert au calendrier.
+ * Options : items = rubriques quotidiennes exigées, weekly = minimum de séances par semaine exigé.
+ * Sans rubrique quotidienne, seule la règle des séances compte (à partir du début d'utilisation).
  */
-export function flameChecker(days, today, { sessionDates = [], minSessions = 3, graceUntil = null } = {}) {
+export function flameChecker(days, today, { sessionDates = [], minSessions = 3, graceUntil = null, items = DEFAULT_DAILY, weekly = true } = {}) {
   const counts = weekSessionCounts(sessionDates);
   const curWeek = weekStart(today);
   const graceWeek = graceUntil ? weekStart(graceUntil) : null;
   return (key) => {
     if (key > today) return false;
     const ws = weekStart(key);
-    const weekFailed = ws < curWeek && !(graceWeek && ws <= graceWeek) && (counts.get(ws) || 0) < minSessions;
-    return !weekFailed && dayChecklist(days, key).perfect;
+    const weekFailed = weekly && ws < curWeek && !(graceWeek && ws <= graceWeek) && (counts.get(ws) || 0) < minSessions;
+    if (weekFailed) return false;
+    if (!items.length) return weekly && !!graceUntil && key >= graceUntil;
+    return dayChecklist(days, key, items).perfect;
   };
 }
 
@@ -136,6 +151,7 @@ export function dayEntries(d = {}) {
     weight: d.weight != null,
     nutrition: d.kcal != null || d.prot != null,
     steps: d.steps != null,
+    routines: (d.habits?.length || 0) > 0,
   };
 }
 

@@ -323,8 +323,8 @@ test('calendrier : jours avec flamme et données saisies', () => {
   assert.equal(lit('2026-11-25'), false); // incomplet
   assert.equal(lit('2026-11-18'), false); // semaine à 2 séances : flamme éteinte
   assert.equal(lit('2026-11-28'), false); // futur
-  assert.deepEqual(dayEntries({ mood: 3, kcal: 2000 }), { sleep: false, mood: true, weight: false, nutrition: true, steps: false });
-  assert.deepEqual(dayEntries(undefined), { sleep: false, mood: false, weight: false, nutrition: false, steps: false });
+  assert.deepEqual(dayEntries({ mood: 3, kcal: 2000 }), { sleep: false, mood: true, weight: false, nutrition: true, steps: false, routines: false });
+  assert.deepEqual(dayEntries(undefined), { sleep: false, mood: false, weight: false, nutrition: false, steps: false, routines: false });
 });
 
 test('semaine d’entraînement : séances restantes et jours restants', () => {
@@ -412,4 +412,70 @@ test('objectifs : moyennes, 1RM réel sur un exercice, séances par semaine', as
   assert.equal(g.currentValue('sessions', {}, ctx).value, 0.5); // 2 séances / 4 semaines
   assert.equal(g.evaluateGoal('lift:squat', { target: 130, dir: 'min' }, ctx).status, 'met');
   assert.equal(g.goalDef('sleep').label, 'Sommeil moyen'); // clé historique
+});
+
+// --- Préférences, onboarding, flamme configurable ---
+test('préférences : widgets selon les objectifs, flamme effective', async () => {
+  const p = await import('../js/core/prefs.js');
+  assert.deepEqual(p.widgetsForFocus(['diet', 'sport']), ['weight', 'nutrition', 'training']);
+  assert.deepEqual(p.widgetsForFocus([]), []);
+  assert.deepEqual(p.focusForWidgets(['sleep', 'mood', 'weight', 'nutrition', 'steps', 'training']), ['sport', 'diet', 'sleep', 'wellbeing', 'activity']);
+  assert.deepEqual(p.cleanWidgets(['mood', 'nope', 'mood', 'sleep']), ['mood', 'sleep']);
+  assert.deepEqual(p.defaultFlameFor(['sleep', 'weight', 'steps', 'training', 'routines']), ['sleep', 'training', 'routines']);
+  // Réglages historiques : sommeil + nutrition + humeur, et le minimum de séances
+  assert.deepEqual(p.flameRules({}), { items: ['sleep', 'nutrition', 'mood'], weekly: true });
+  // Un widget retiré de l'accueil ne compte plus pour la flamme
+  assert.deepEqual(p.flameRules({ widgets: ['sleep', 'routines'], flame: ['sleep', 'training', 'routines'] }), { items: ['sleep', 'routines'], weekly: false });
+});
+
+test('routines : cocher, total mémorisé par jour, liste modifiée', async () => {
+  const p = await import('../js/core/prefs.js');
+  const habits = [{ id: 'a', name: 'Lire' }, { id: 'b', name: 'Méditer' }];
+  let day = { date: '2026-11-27' };
+  day = { ...day, ...p.toggleHabit(day, 'a', habits) };
+  assert.deepEqual([day.habits, day.habitsTotal], [['a'], 2]);
+  assert.equal(p.habitsComplete(day), false);
+  day = { ...day, ...p.toggleHabit(day, 'b', habits) };
+  assert.equal(p.habitsComplete(day), true);
+  // décocher tout efface les champs
+  assert.deepEqual(p.toggleHabit({ habits: ['a'], habitsTotal: 2 }, 'a', habits), { habits: null, habitsTotal: null });
+  // une habitude ajoutée plus tard ne change pas une journée passée
+  assert.equal(p.habitsComplete({ habits: ['a', 'b'], habitsTotal: 2 }), true);
+  // liste modifiée : la journée suit (habitude supprimée retirée, nouveau total)
+  assert.deepEqual(p.reconcileHabits({ habits: ['a', 'b'] }, [{ id: 'b' }, { id: 'c' }, { id: 'd' }]), { habits: ['b'], habitsTotal: 3 });
+  assert.equal(p.reconcileHabits({}, habits), null);
+  assert.equal(p.habitsComplete({}), false);
+});
+
+test('flamme configurable : rubriques au choix, poids sur 3 jours, séances seules', () => {
+  const today = '2026-11-27';
+  const days = new Map([
+    ['2026-11-25', { weight: 80, mood: 4 }],
+    ['2026-11-26', { mood: 4, habits: ['a'], habitsTotal: 1 }],
+    ['2026-11-27', { mood: 3 }],
+  ]);
+  // humeur seule
+  assert.equal(dayChecklist(days, '2026-11-27', ['mood']).perfect, true);
+  // poids : pesée récente suffisante (2 jours), pas au-delà de 3 jours
+  assert.equal(dayChecklist(days, '2026-11-27', ['weight']).perfect, true);
+  assert.equal(dayChecklist(days, '2026-11-29', ['weight']).perfect, false);
+  // routines : toutes cochées ce jour-là
+  assert.deepEqual(dayChecklist(days, '2026-11-27', ['mood', 'routines']).missing, ['routines']);
+  assert.equal(dayChecklist(days, '2026-11-26', ['routines']).perfect, true);
+  // aucun critère : pas de jour parfait
+  assert.equal(dayChecklist(days, today, []).perfect, false);
+  // flamme sur l'humeur seule, sans règle de séances : 3 jours
+  assert.equal(perfectStreak(days, today, { items: ['mood'], weekly: false }), 3);
+  // séances seules : chaque jour depuis le début d'utilisation, tant que les semaines passées ont leur minimum
+  const opts = { items: [], weekly: true, minSessions: 1, graceUntil: '2026-11-20', sessionDates: [] };
+  assert.equal(perfectStreak(days, today, opts), 8); // du 20 au 27 (semaine du 16/11 épargnée)
+  assert.equal(flameChecker(days, today, { ...opts, graceUntil: '2026-11-24' })('2026-11-23'), false);
+});
+
+test('code ami : saisie et affichage', async () => {
+  const p = await import('../js/core/prefs.js');
+  assert.equal(p.parseFriendCode('123 456'), '123456');
+  assert.equal(p.parseFriendCode('12345'), null);
+  assert.equal(p.parseFriendCode(' 012-345 '), '012345');
+  assert.equal(p.formatFriendCode('012345'), '012 345');
 });

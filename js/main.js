@@ -1,5 +1,5 @@
-import { initStore, activeSession } from './core/store.js';
-import { route, startRouter } from './core/router.js';
+import { initStore, activeSession, needsOnboarding, subscribe, state } from './core/store.js';
+import { route, startRouter, currentPath } from './core/router.js';
 import { toast } from './core/ui.js';
 import { unlockAudio } from './core/feedback.js';
 import { h } from './core/dom.js';
@@ -15,6 +15,12 @@ import exerciseView from './views/exercise.js';
 import { programsView, programEditView } from './views/programs.js';
 import settingsView from './views/settings.js';
 import goalsView from './views/goals.js';
+import welcomeView from './views/welcome.js';
+import profileView from './views/profile.js';
+import { friendsView, chatView } from './views/friends.js';
+import { applyTheme } from './core/theme.js';
+import { schedulePushStatus } from './core/social.js';
+import { subscribePush } from './core/push.js';
 
 route(/^\/$/, homeView);
 route(/^\/day\/(\d{4}-\d{2}-\d{2})$/, homeView);
@@ -29,6 +35,10 @@ route(/^\/programs$/, programsView);
 route(/^\/programs\/([\w-]+)$/, programEditView);
 route(/^\/settings$/, settingsView);
 route(/^\/goals$/, goalsView);
+route(/^\/welcome$/, welcomeView);
+route(/^\/profile$/, profileView);
+route(/^\/friends$/, friendsView);
+route(/^\/friends\/([0-9a-f-]{36})$/, chatView);
 
 // iOS : l'audio doit être débloqué par un geste utilisateur.
 ['touchend', 'click'].forEach((ev) => document.addEventListener(ev, unlockAudio, { passive: true }));
@@ -49,8 +59,16 @@ async function boot() {
     );
     return;
   }
+  applyTheme(state.settings);
+  // Première ouverture (ou installation existante pas encore passée par l'accueil) : onboarding.
+  if (needsOnboarding() && currentPath() !== '/welcome') history.replaceState(null, '', '#/welcome');
   startRouter();
   registerServiceWorker();
+  // Statut partagé avec les amis (humeur du jour, dernière séance), si activé.
+  subscribe((type) => (type === 'days' || type === 'sessions' || type === 'settings') && schedulePushStatus());
+  schedulePushStatus();
+  // Notifications : l'abonnement de l'appareil peut changer, on le renvoie au serveur à chaque ouverture.
+  if (state.settings.notifications?.enabled) subscribePush().catch((e) => console.warn('Push', e.message));
 }
 
 function registerServiceWorker() {
@@ -82,6 +100,11 @@ function registerServiceWorker() {
       if (document.visibilityState === 'visible') reg.update().catch(() => {});
     });
   }).catch((e) => console.warn('SW', e));
+
+  // Notification touchée alors que l'app était ouverte : aller sur l'écran visé.
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    if (e.data?.type === 'open' && e.data.url) location.hash = new URL(e.data.url).hash || '#/';
+  });
 
   let reloading = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

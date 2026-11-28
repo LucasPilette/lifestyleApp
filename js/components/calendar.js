@@ -15,6 +15,7 @@ const DOTS = [
   { id: 'nutrition', label: 'Nutrition', c: 'var(--c-kcal)' },
   { id: 'steps', label: 'Pas', c: 'var(--c-steps)' },
   { id: 'training', label: 'Séance', c: 'var(--accent)' },
+  { id: 'routines', label: 'Routines', c: 'var(--c-routine)' },
 ];
 const WEEKDAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 
@@ -22,11 +23,13 @@ const WEEKDAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
  * @param {object} o
  * @param {string} o.selected jour affiché
  * @param {string} o.today
+ * @param {string[]} [o.widgets] widgets affichés à l'accueil (pastilles et légende limitées à ceux-ci)
  * @param {(key: string) => boolean} o.isFlame
  * @param {Map<string, {count: number, color: string|null}>} o.sessionDays séances terminées par jour
  * @param {(key: string) => void} o.onPick
  */
-export function openCalendar({ selected, today, isFlame, sessionDays, onPick }) {
+export function openCalendar({ selected, today, widgets, isFlame, sessionDays, onPick }) {
+  const dotsShown = DOTS.filter((d) => !widgets || widgets.includes(d.id));
   let month = monthStart(selected);
   const currentMonth = monthStart(today);
   const title = h('div', { class: 'cal-title' });
@@ -57,8 +60,8 @@ export function openCalendar({ selected, today, isFlame, sessionDays, onPick }) 
       const lit = isFlame(k);
       const future = k > today;
       if (lit) flames++;
-      if (trained) sessions += trained.count;
-      const dots = DOTS.filter((d) => (d.id === 'training' ? trained : entries[d.id]));
+      if (trained && dotsShown.some((d) => d.id === 'training')) sessions += trained.count;
+      const dots = dotsShown.filter((d) => (d.id === 'training' ? trained : entries[d.id]));
       const n = parseKey(k).getDate();
       cells.push(h('button', {
         class: `cal-day ${lit ? 'lit' : ''} ${k === today ? 'today' : ''} ${k === selected ? 'sel' : ''} ${future ? 'future' : ''}`,
@@ -77,7 +80,7 @@ export function openCalendar({ selected, today, isFlame, sessionDays, onPick }) 
     grid.replaceChildren(...cells);
     stats.replaceChildren(
       h('span', { class: 'cal-stat flame' }, icon('flame', 14), `${flames} jour${flames > 1 ? 's' : ''} parfait${flames > 1 ? 's' : ''}`),
-      h('span', { class: 'cal-stat' }, icon('dumbbell', 14), `${sessions} séance${sessions > 1 ? 's' : ''}`));
+      dotsShown.some((d) => d.id === 'training') ? h('span', { class: 'cal-stat' }, icon('dumbbell', 14), `${sessions} séance${sessions > 1 ? 's' : ''}`) : '');
   }
 
   close = sheet((c) => {
@@ -88,7 +91,7 @@ export function openCalendar({ selected, today, isFlame, sessionDays, onPick }) 
       h('div', { class: 'cal-week', 'aria-hidden': 'true' }, WEEKDAYS.map((d) => h('span', null, d))),
       grid,
       // Séance : pastille multicolore, chaque jour prend la couleur de sa séance
-      h('div', { class: 'cal-legend' }, DOTS.map((d) => h('span', { class: d.id === 'training' ? 'multi' : '', style: { '--c': d.c } }, h('i'), d.label))),
+      h('div', { class: 'cal-legend' }, dotsShown.map((d) => h('span', { class: d.id === 'training' ? 'multi' : '', style: { '--c': d.c } }, h('i'), d.label))),
       selected !== today
         ? h('button', { class: 'btn primary block', onClick: () => { c(); onPick(today); } }, 'Revenir à aujourd’hui')
         : null,

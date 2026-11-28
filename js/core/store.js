@@ -7,11 +7,21 @@ import { clone, mergeDeep, uid } from './util.js';
 import { normalizeWarmups, createSession } from './training.js';
 import { dateKey, parseKey, todayKey } from './date.js';
 import { DEFAULT_OBJECTIVES, DEFAULT_GOAL_LIST, bestBenchLift } from './goals.js';
+import { DEFAULT_WIDGETS, DEFAULT_FLAME } from './prefs.js';
 
-export const DAY_FIELDS = ['sleepMin', 'sleepQ', 'kcal', 'prot', 'steps', 'weight', 'mood', 'moodNote'];
+export const DAY_FIELDS = ['sleepMin', 'sleepQ', 'kcal', 'prot', 'steps', 'weight', 'mood', 'moodNote', 'habits', 'habitsTotal'];
 
 export const DEFAULT_SETTINGS = {
-  name: 'Lucas', // prénom affiché dans le message d'accueil
+  name: '', // prénom affiché dans le message d'accueil
+  theme: 'fall', // spring | summer | fall | winter (voir core/prefs.js)
+  mode: 'dark', // dark | light | auto
+  focus: [], // objectifs de vie cochés à l'accueil (sport, diet…)
+  widgets: DEFAULT_WIDGETS, // rubriques de l'accueil, dans l'ordre
+  flame: DEFAULT_FLAME, // rubriques exigées pour la flamme ('training' = minimum de séances par semaine)
+  habits: [], // routines : [{ id, name }]
+  notifications: { enabled: false }, // l'utilisateur accepte d'en recevoir (permission demandée à part)
+  shareActivity: false, // partager humeur du jour et dernière séance avec ses amis
+  friendCode: null, // code ami (6 chiffres), attribué par le serveur
   objectives: DEFAULT_OBJECTIVES, // objectifs à long terme (voir core/goals.js)
   goalList: DEFAULT_GOAL_LIST, // objectifs affichés, dans l'ordre
   goals: { sleepMin: 480, kcal: 2600, prot: 150, steps: 10000, minSessions: 3 }, // minSessions : minimum hebdo pour garder la flamme
@@ -58,8 +68,12 @@ export async function initStore() {
     db.getAll('templates'),
     db.getAll('sessions'),
   ]);
+  // Avant l'onboarding, le prénom par défaut était « Lucas » : on le garde pour les installations existantes.
+  if (settings && settings.name === undefined) settings.name = 'Lucas';
   state.settings = mergeDeep(DEFAULT_SETTINGS, settings || {});
   state.meta = meta || {};
+  // Installation existante sans onboarding : on le proposera une fois, prérempli (rien n'est effacé).
+  if (state.meta.onboarded == null && (days.length || sessions.length)) state.meta.legacyUser = true;
   state.days = new Map(days.map((d) => [d.date, d]));
   state.exercises = new Map(exercises.map((e) => [e.id, e]));
   state.templates = templates.sort((a, b) => a.order - b.order);
@@ -134,13 +148,28 @@ export function updateSettings(patch) {
   emit('settings');
 }
 
+/** Onboarding terminé (ou passé). */
+export async function markOnboarded() {
+  state.meta = { ...state.meta, onboarded: Date.now(), legacyUser: false };
+  await persist(db.kvSet('meta', state.meta));
+}
+
+export const needsOnboarding = () => !state.meta.onboarded;
+
 // --- Journal quotidien ---------------------------------------------------
 export const getDay = (date) => state.days.get(date) || null;
 
 export function setDayField(date, field, value) {
+  setDayFields(date, { [field]: value });
+}
+
+/** Modifie plusieurs champs d'une journée en une écriture (null = effacer). */
+export function setDayFields(date, fields) {
   const day = { ...(state.days.get(date) || { date }) };
-  if (value == null || value === '' || Number.isNaN(value)) delete day[field];
-  else day[field] = value;
+  for (const [field, value] of Object.entries(fields)) {
+    if (value == null || value === '' || Number.isNaN(value)) delete day[field];
+    else day[field] = value;
+  }
   day.updatedAt = Date.now();
   if (!DAY_FIELDS.some((f) => day[f] != null)) {
     state.days.delete(date);
@@ -201,7 +230,8 @@ export async function addPastSession(templateId, date) {
 
 /** Ajout ponctuel demandé par Lucas : Atlas mardi 24/11 et Zeus mercredi 25/11/2026 (une seule fois). */
 async function backfillWeek48() {
-  if (state.meta.backfillW48 || todayKey() > '2026-12-06') return;
+  // Uniquement l'installation d'origine (données antérieures à l'onboarding), jamais un nouveau compte.
+  if (state.meta.backfillW48 || todayKey() > '2026-12-06' || !state.meta.legacyUser) return;
   for (const [id, date] of [['lower-b', '2026-11-24'], ['upper-a', '2026-11-25']]) {
     if (!getTemplate(id)) continue;
     const exists = state.sessions.some((s) => s.status === 'done' && s.templateId === id && dateKey(new Date(s.startedAt)) === date);
@@ -217,7 +247,7 @@ async function backfillWeek48() {
  * ou de la barre la plus lourde réellement passée si elle est supérieure.
  */
 async function fixBenchRealOnce() {
-  if (state.meta.benchReal) return;
+  if (state.meta.benchReal || !state.meta.legacyUser) return; // installation d'origine seulement
   const lift = bestBenchLift(state.sessions);
   const bench = state.settings.objectives?.bench;
   if (bench) {
@@ -309,7 +339,7 @@ export async function importData(data) {
     if (!Array.isArray(data[k])) throw new Error(`Sauvegarde incomplète (${k}).`);
   }
   await db.replaceAll({
-    kv: { settings: data.settings || {}, meta: { ...(data.meta || {}), seedVersion: data.meta?.seedVersion || SEED_VERSION } },
+    kv: { settings: data.settings || {}, meta: { ...(data.meta || {}), seedVersion: data.meta?.seedVersion || SEED_VERSION, onboarded: data.meta?.onboarded || state.meta.onboarded || null } },
     days: data.days.filter((d) => d && d.date),
     exercises: data.exercises.filter((e) => e && e.id),
     templates: data.templates.filter((t) => t && t.id),

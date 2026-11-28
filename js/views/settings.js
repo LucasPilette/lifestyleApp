@@ -11,6 +11,7 @@ import { VERSION } from '../version.js';
 import { evaluateGoal } from '../core/goals.js';
 import { editGoal, goalList } from '../components/goal-editor.js';
 import { doneSessions } from '../core/store.js';
+import { cleanWidgets } from '../core/prefs.js';
 
 export default function settingsView(root) {
   const st = state.settings;
@@ -92,8 +93,8 @@ export default function settingsView(root) {
     }
   });
 
-  const nameInput = h('input', { class: 'text-input', type: 'text', value: st.name || '', placeholder: 'Ton prénom', autocomplete: 'given-name', style: { width: '150px', textAlign: 'right', padding: '8px 12px' } });
-  nameInput.addEventListener('input', () => updateSettings({ name: nameInput.value.trim() }));
+  const widgets = cleanWidgets(st.widgets);
+  const has = (w) => widgets.includes(w);
 
   // Objectifs à long terme : un appui ouvre le réglage
   const goalsList = h('div', { class: 'list' });
@@ -112,18 +113,20 @@ export default function settingsView(root) {
   renderGoals();
 
   const page = h('div', { class: 'page' },
-    h('div', { class: 'section-title' }, 'Profil'),
-    h('div', { class: 'list' }, row('Prénom', 'Pour le message d’accueil', nameInput)),
+    h('div', { class: 'list' },
+      h('button', { class: 'row', onClick: () => navigate('/profile') }, icon('user', 20),
+        h('div', { class: 'row-main' }, h('div', { class: 'row-title' }, 'Profil, thème et accueil'), h('div', { class: 'row-sub' }, 'Prénom, code ami, widgets, flamme, routines')),
+        icon('chevron', 18, 'chev'))),
     h('div', { class: 'section-title' }, 'Mes objectifs'),
     goalsList,
     h('button', { class: 'btn ghost block', onClick: () => navigate('/goals') }, icon('trophy', 18), 'Ouvrir l’onglet Objectifs (ajouter, détails)'),
-    h('div', { class: 'section-title' }, 'Objectifs quotidiens'),
+    widgets.some((w) => ['sleep', 'nutrition', 'steps', 'training'].includes(w)) ? h('div', { class: 'section-title' }, 'Objectifs quotidiens') : null,
     h('div', { class: 'list' },
-      row('Sommeil', null, stepper({ value: g.sleepMin || 480, step: 15, min: 240, max: 720, format: fmtSleep, onChange: (v) => updateSettings({ goals: { sleepMin: v } }) })),
-      row('Calories', 'Atteint à ±10 %', goalInput('kcal', 'kcal')),
-      row('Protéines', 'Minimum', goalInput('prot', 'g', '72px')),
-      row('Pas', 'Facultatif, hors jour parfait', goalInput('steps', 'pas')),
-      row('Séances minimum par semaine', 'En dessous, la semaine éteint la flamme', stepper({ value: g.minSessions || 3, step: 1, min: 1, max: 7, format: (v) => String(v), onChange: (v) => updateSettings({ goals: { minSessions: v } }) }))),
+      has('sleep') && row('Sommeil', null, stepper({ value: g.sleepMin || 480, step: 15, min: 240, max: 720, format: fmtSleep, onChange: (v) => updateSettings({ goals: { sleepMin: v } }) })),
+      has('nutrition') && row('Calories', 'Atteint à ±10 %', goalInput('kcal', 'kcal')),
+      has('nutrition') && row('Protéines', 'Minimum', goalInput('prot', 'g', '72px')),
+      has('steps') && row('Pas', 'Objectif du jour', goalInput('steps', 'pas')),
+      has('training') && row('Séances minimum par semaine', state.settings.flame.includes('training') ? 'En dessous, la semaine éteint la flamme' : 'Objectif de la semaine', stepper({ value: g.minSessions || 3, step: 1, min: 1, max: 7, format: (v) => String(v), onChange: (v) => updateSettings({ goals: { minSessions: v } }) }))),
 
     h('div', { class: 'section-title' }, 'Entraînement'),
     h('div', { class: 'list' },
@@ -141,7 +144,7 @@ export default function settingsView(root) {
       h('button', { class: 'row', onClick: () => fileInput.click() }, icon('upload', 20), h('div', { class: 'row-main' }, h('div', { class: 'row-title' }, 'Restaurer une sauvegarde'), h('div', { class: 'row-sub' }, 'Depuis un fichier .json')))),
     fileInput,
     h('p', { class: 'faint', style: { fontSize: '12.5px', margin: '0 4px', lineHeight: 1.5 } },
-      'Tes données restent sur ce téléphone, rien n’est envoyé en ligne. Exporte régulièrement une sauvegarde (dans Fichiers ou iCloud Drive) pour ne rien perdre en cas de changement de téléphone.'),
+      'Tes données restent sur ce téléphone. Seuls ton prénom, ton code ami, tes messages et (si tu l’actives) ton humeur du jour et ta dernière séance passent par le serveur des amis. Exporte régulièrement une sauvegarde (dans Fichiers ou iCloud Drive) pour ne rien perdre en cas de changement de téléphone.'),
 
     h('div', { class: 'section-title' }, 'À propos'),
     h('div', { class: 'list' },
@@ -149,5 +152,5 @@ export default function settingsView(root) {
       row('Mode', null, h('span', { class: 'row-end' }, isStandalone() ? 'App installée' : 'Navigateur')),
       row('Stockage', `${fmtNum(state.sessions.length)} séances · ${fmtNum(state.days.size)} jours`, h('span', { class: 'row-end', style: { fontSize: '12.5px' } }, persistInfo))));
 
-  root.append(h('div', { class: 'view' }, pageHeader({ title: 'Réglages', onBack: () => back('/') }), page));
+  root.append(h('div', { class: 'view' }, pageHeader({ title: 'Paramètres', onBack: () => back('/') }), page));
 }

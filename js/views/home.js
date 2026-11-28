@@ -2,13 +2,15 @@
 // (titre coloré + résumé ; un appui déroule la saisie, la flèche la replie).
 
 import { h, icon, iconButton, numInput } from '../core/dom.js';
-import { state, getDay, setDayField, activeSession, doneSessions, sessionColor, updateSettings } from '../core/store.js';
+import { state, getDay, setDayField, setDayFields, activeSession, doneSessions, sessionColor, updateSettings } from '../core/store.js';
 import { todayKey, addDays, formatLong, formatShort, weekStart, dateKey, agoLabel, formatWeekday } from '../core/date.js';
 import { METRICS, MOODS, meetsGoal, dayChecklist, perfectStreak, flameChecker, weekTraining, weightRequired, lastValueBefore } from '../core/metrics.js';
 import { navigate } from '../core/router.js';
 import { fmtNum, fmtClock, fmtSleep, parseNum } from '../core/format.js';
 import { debounce } from '../core/util.js';
-import { toast } from '../core/ui.js';
+import { toast, sheet } from '../core/ui.js';
+import { WIDGETS, cleanWidgets, flameRules, toggleHabit, habitsComplete, reconcileHabits } from '../core/prefs.js';
+import { habitsEditor } from '../components/prefs-ui.js';
 import { haptic } from '../core/feedback.js';
 import { dayRings } from '../components/ring.js';
 import { openCalendar } from '../components/calendar.js';
@@ -33,7 +35,10 @@ export function sessionDaySet() {
  * Message d'accueil selon la journée (c = dayChecklist) et la semaine d'entraînement (wk = weekTraining).
  */
 export function greetingMessage(c, isToday, wk) {
-  if (!isToday) return c.perfect ? 'Journée parfaite. 🔥' : `Il manquait : ${c.missing.join(', ')}.`;
+  if (!isToday) {
+    if (!c.items.length) return '';
+    return c.perfect ? 'Journée parfaite. 🔥' : `Il manquait : ${c.missing.join(', ')}.`;
+  }
   const plural = (n, w) => `${n} ${w}${n > 1 ? 's' : ''}`;
   let training = '';
   if (wk && wk.needed > 0) {
@@ -41,8 +46,9 @@ export function greetingMessage(c, isToday, wk) {
       ? ` Attention : encore ${plural(wk.needed, 'séance')} d’ici dimanche pour garder ta flamme.`
       : ` Encore ${plural(wk.needed, 'séance')} cette semaine pour garder ta flamme.`;
   }
+  if (!c.items.length) return training.trim() || 'Belle journée ! ✨';
   if (c.perfect) return `Journée parfaite. 🔥${training}`;
-  if (c.done === 0) return `Commence par ta nuit, ta nutrition et ton humeur.${training}`;
+  if (c.done === 0) return `Au programme aujourd’hui : ${c.missing.join(', ')}.${training}`;
   return `Il te reste à renseigner : ${c.missing.join(', ')}.${training}`;
 }
 
@@ -51,6 +57,9 @@ export default function home(root, dateParam) {
   const date = dateParam && dateParam < today ? dateParam : today;
   const isToday = date === today;
   const goals = state.settings.goals;
+  const widgets = cleanWidgets(state.settings.widgets);
+  const rules = flameRules(state.settings); // { items, weekly }
+  const hasTraining = widgets.includes('training');
   const day = () => getDay(date) || {};
   const sessionDays = sessionDaySet();
   const refreshers = [];
@@ -87,7 +96,7 @@ export default function home(root, dateParam) {
       cur.color ||= sessionColor(s);
       sessionDays.set(k, cur);
     }
-    openCalendar({ selected: date, today, isFlame: flameChecker(state.days, today, streakOpts()), sessionDays, onPick: goDay });
+    openCalendar({ selected: date, today, widgets, isFlame: flameChecker(state.days, today, streakOpts()), sessionDays, onPick: goDay });
   };
   const header = h('header', { class: 'topbar home-top' },
     h('div', { class: 'top-left' }, iconButton('menu', 'Menu', openSideMenu, 'glass-btn')),
@@ -106,29 +115,41 @@ export default function home(root, dateParam) {
     sessionDates: sessionDateList(),
     minSessions,
     graceUntil: state.meta.createdAt ? dateKey(new Date(state.meta.createdAt)) : null,
+    items: rules.items,
+    weekly: rules.weekly,
   });
+  const flameRuleText = () => {
+    const daily = rules.items.map((id) => WIDGETS[id].short);
+    const parts = [];
+    if (daily.length) parts.push(`Jour parfait : ${daily.join(', ')} renseignés.`);
+    if (rules.weekly) parts.push(`Moins de ${minSessions} séances dans la semaine éteint la flamme.`);
+    return parts.join(' ') || 'Aucun critère de flamme : choisis-les dans ton profil.';
+  };
   const ringBox = h('button', { class: 'ring-box', onClick: () => {
     const n = perfectStreak(state.days, today, streakOpts());
     const streakTxt = n ? `🔥 ${n} jour${n > 1 ? 's' : ''} parfait${n > 1 ? 's' : ''} d’affilée. ` : '';
-    toast(`${streakTxt}Jour parfait : sommeil, nutrition et humeur renseignés. Moins de ${minSessions} séances dans la semaine éteint la flamme.`, { duration: 5000 });
+    toast(`${streakTxt}${flameRuleText()}`, { duration: 5000 });
   } });
   const hour = new Date().getHours();
   const hello = `${hour >= 18 || hour < 4 ? 'Bonsoir' : 'Bonjour'}${state.settings.name ? ` ${state.settings.name}` : ''}`;
   const greet = h('section', { class: 'greet' }, h('div', { class: 'greet-text' }, h('h1', null, hello), message, legend), ringBox);
   refreshers.push(() => {
-    const c = dayChecklist(state.days, date);
+    const c = dayChecklist(state.days, date, rules.items);
     const n = perfectStreak(state.days, today, streakOpts());
     // semaine du jour affiché (pour un jour passé : sa semaine, comptée jusqu'à dimanche)
     const wk = weekTraining(sessionDateList(), date, minSessions);
     ringBox.replaceChildren(
-      dayRings({ data: c.done / c.items.length, activity: Math.min(1, wk.count / minSessions) }),
+      dayRings({ data: c.items.length ? c.done / c.items.length : 0, activity: hasTraining ? Math.min(1, wk.count / minSessions) : null }),
       h('span', { class: `ring-center ${n > 0 ? 'lit' : ''}` }, icon('flame', 15), h('b', null, n)));
     ringBox.classList.toggle('perfect', c.perfect);
-    ringBox.setAttribute('aria-label', `Saisies ${c.done} sur ${c.items.length}, ${wk.count} séances sur ${minSessions} cette semaine, ${n} jours parfaits d’affilée`);
+    ringBox.setAttribute('aria-label', `Saisies ${c.done} sur ${c.items.length}${hasTraining ? `, ${wk.count} séances sur ${minSessions} cette semaine` : ''}, ${n} jours parfaits d’affilée`);
     legend.replaceChildren(
-      h('span', { class: 'lg-data' }, h('i'), `Saisies ${c.done}/${c.items.length}`),
-      h('span', { class: 'lg-act' }, h('i'), `Séances ${Math.min(wk.count, 99)}/${minSessions} sem.`));
-    message.textContent = greetingMessage(c, isToday, wk);
+      c.items.length ? h('span', { class: 'lg-data' }, h('i'), `Saisies ${c.done}/${c.items.length}`) : '',
+      hasTraining ? h('span', { class: 'lg-act' }, h('i'), `Séances ${Math.min(wk.count, 99)}/${minSessions} sem.`) : '');
+    // Semaine de démarrage : elle n'éteint jamais la flamme, inutile d'alerter.
+    const grace = streakOpts().graceUntil;
+    const graceWeek = grace && weekStart(date) <= weekStart(grace);
+    message.textContent = greetingMessage(c, isToday, rules.weekly && !graceWeek ? wk : null);
   });
 
   const page = h('main', { class: 'page home-page' }, greet);
@@ -244,7 +265,9 @@ export default function home(root, dateParam) {
       }, n)));
   };
   renderQuality();
-  page.append(rubric({
+  // Rubriques : construites à la demande, affichées selon les widgets choisis (et dans leur ordre).
+  const builders = {};
+  builders.sleep = () => rubric({
     id: 'sleep', color: 'var(--c-sleep)', iconName: 'moon', title: 'Sommeil', chartTo: '/metric/sommeil',
     summary: () => {
       const d = day();
@@ -258,7 +281,7 @@ export default function home(root, dateParam) {
         qWrap),
       h('div', { class: 'rb-hint' }, 'Durée de la nuit, puis qualité de 1 à 5'),
     ],
-  }));
+  });
 
   // --- Humeur ---
   let mood = d0.mood ?? null;
@@ -275,17 +298,17 @@ export default function home(root, dateParam) {
   renderMood();
   const note = h('textarea', { class: 'text-input mood-note', rows: 2, maxlength: 280, placeholder: 'Un mot sur ta journée (facultatif)' }, d0.moodNote || '');
   note.addEventListener('input', () => save('moodNote', note.value.trim() || null));
-  page.append(rubric({
+  builders.mood = () => rubric({
     id: 'mood', color: 'var(--c-mood)', iconName: 'smile', title: 'Humeur', chartTo: '/metric/humeur',
     summary: () => (day().mood ? MOODS[day().mood].emoji : null),
     done: () => day().mood != null,
     body: [moodWrap, moodLabel, note],
-  }));
+  });
 
   // --- Poids (rappel tous les 3 jours) ---
   const lastW = lastValueBefore(state.days, 'weight', date);
   const weightDue = weightRequired(state.days, date);
-  page.append(rubric({
+  builders.weight = () => rubric({
     id: 'weight', color: 'var(--c-weight)', iconName: 'scale', title: 'Poids', chartTo: '/metric/poids',
     summary: () => {
       const w = day().weight;
@@ -301,10 +324,10 @@ export default function home(root, dateParam) {
         lastW ? `Dernière pesée : ${METRICS.weight.fmt(lastW.value)} · ${agoLabel(lastW.key, date)}. ` : 'Idéalement le matin, à jeun. ',
         'Rappel tous les 3 jours.'),
     ],
-  }));
+  });
 
   // --- Nutrition ---
-  page.append(rubric({
+  builders.nutrition = () => rubric({
     id: 'nutrition', color: 'var(--c-kcal)', iconName: 'flame', title: 'Nutrition', chartTo: '/metric/nutrition',
     summary: () => {
       const d = day();
@@ -315,18 +338,64 @@ export default function home(root, dateParam) {
     body: h('div', { class: 'mf-grid' },
       metricField('kcal', 'Calories', 'kcal', String(goals.kcal || 2500)),
       metricField('prot', 'Protéines', 'g', String(goals.prot || 150))),
-  }));
+  });
 
   // --- Pas ---
-  page.append(rubric({
+  builders.steps = () => rubric({
     id: 'steps', color: 'var(--c-steps)', iconName: 'steps', title: 'Pas', chartTo: '/metric/pas',
     summary: () => (day().steps != null ? fmtNum(day().steps) : null),
     done: () => day().steps != null,
     body: metricField('steps', isToday ? 'Aujourd’hui' : 'Ce jour-là', 'pas', String(goals.steps || 8000)),
-  }));
+  });
 
   // --- Entraînement de la semaine ---
-  page.append(trainingRubric(rubric, date, today, sessionDays));
+  builders.training = () => trainingRubric(rubric, date, today, sessionDays);
+
+  // --- Routines (habitudes à cocher) ---
+  builders.routines = () => {
+    const list = h('div', { class: 'habit-checks' });
+    const manage = () => sheet((close) => [
+      habitsEditor({
+        value: state.settings.habits || [],
+        onChange: (habits) => {
+          updateSettings({ habits });
+          const fix = reconcileHabits(getDay(today), habits);
+          if (fix) setDayFields(today, fix);
+          renderHabits();
+          refresh();
+        },
+      }),
+      h('button', { class: 'btn primary block', onClick: () => close() }, 'Terminé'),
+    ], { title: 'Mes routines' });
+    const renderHabits = () => {
+      const habits = state.settings.habits || [];
+      const done = new Set(day().habits || []);
+      list.replaceChildren(
+        ...habits.map((x) => h('button', {
+          class: `habit-check ${done.has(x.id) ? 'on' : ''}`, role: 'checkbox', 'aria-checked': String(done.has(x.id)),
+          onClick: () => {
+            setDayFields(date, toggleHabit(day(), x.id, state.settings.habits || []));
+            haptic();
+            renderHabits();
+            refresh();
+          },
+        }, h('span', { class: 'cc-box', 'aria-hidden': 'true' }, done.has(x.id) ? icon('check', 15) : null), h('span', null, x.name))),
+        habits.length ? '' : h('div', { class: 'rb-hint', style: { marginTop: 0 } }, 'Aucune routine pour l’instant : ajoute tes habitudes du quotidien.'),
+        h('button', { class: 'link-btn', onClick: manage }, habits.length ? 'Gérer mes routines' : '+ Ajouter des routines'));
+    };
+    renderHabits();
+    return rubric({
+      id: 'routines', color: 'var(--c-routine)', iconName: 'check', title: 'Routines',
+      summary: () => {
+        const n = (state.settings.habits || []).length;
+        return n ? `${(day().habits || []).length}/${n}` : null;
+      },
+      done: () => habitsComplete(day()),
+      body: list,
+    });
+  };
+
+  for (const id of widgets) if (builders[id]) page.append(builders[id]());
 
 
   // --- Bouton S'entraîner ---
@@ -343,7 +412,9 @@ export default function home(root, dateParam) {
   }
 
   refresh();
-  root.append(h('div', { class: 'home-bg', 'aria-hidden': 'true' }), h('div', { class: 'view has-cta' }, header, page), h('div', { class: 'cta-bar' }, cta));
+  // Le bouton S'entraîner n'apparaît qu'avec le widget Entraînement (ou une séance en cours).
+  const showCta = hasTraining || !!active;
+  root.append(h('div', { class: 'home-bg', 'aria-hidden': 'true' }), h('div', { class: `view ${showCta ? 'has-cta' : ''}` }, header, page), showCta ? h('div', { class: 'cta-bar' }, cta) : '');
 
   return () => {
     clearInterval(timer);
